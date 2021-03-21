@@ -47,8 +47,8 @@ function GarrisonCapacitiveDisplayFrame_Update(self, success, maxShipments, owne
 
 		self.available = available;
 		display.ShipmentIconFrame.itemId = nil;
-		
-		
+
+
 	    local reagents = display.Reagents;
 
 	    for i = 1, #reagents do
@@ -70,7 +70,7 @@ function GarrisonCapacitiveDisplayFrame_Update(self, success, maxShipments, owne
 	    		break;
 	    	end
 
-			reagent.Icon:SetTexture(texture);	    	
+			reagent.Icon:SetTexture(texture);
 			reagent.Name:SetText(name);
 			reagent.Name:SetTextColor(ITEM_QUALITY_COLORS[quality].r, ITEM_QUALITY_COLORS[quality].g, ITEM_QUALITY_COLORS[quality].b);
 			-- Grayout items
@@ -86,7 +86,7 @@ function GarrisonCapacitiveDisplayFrame_Update(self, success, maxShipments, owne
 			quantity = AbbreviateNumbers(quantity);
 			reagent.Count:SetText(quantity.." /"..needed);
 			--fix text overflow when the reagent count is too high
-			if (math.floor(reagent.Count:GetStringWidth()) > math.floor(reagent.Icon:GetWidth() + .5)) then 
+			if (math.floor(reagent.Count:GetStringWidth()) > math.floor(reagent.Icon:GetWidth() + .5)) then
 			--round count width down because the leftmost number can overflow slightly without looking bad
 			--round icon width because it should always be an int, but sometimes it's a slightly off float
 				reagent.Count:SetText(quantity.."\n/"..needed);
@@ -111,12 +111,14 @@ function GarrisonCapacitiveDisplayFrame_Update(self, success, maxShipments, owne
 					reagent:SetPoint("TOP", reagents[i-1], "BOTTOM", 0, -6);
 				end
 
-				local name, quantity, texture, _, _, _, _, quality = GetCurrencyInfo(currencyID);
+				local currencyInfo = C_CurrencyInfo.GetCurrencyInfo(currencyID);
 
-				-- If we don't have a name here the data is not set up correctly, but this prevents lua errors later.
-				if (name) then
-					reagent.Icon:SetTexture(texture);	    	
-					reagent.Name:SetText(name);
+				-- If we don't have currencyInfo here the data is not set up correctly, but this prevents lua errors later.
+				if (currencyInfo) then
+					local quantity = currencyInfo.quantity;
+					local quality = currencyInfo.quality;
+					reagent.Icon:SetTexture(currencyInfo.iconFileID);
+					reagent.Name:SetText(currencyInfo.name);
 					reagent.Name:SetTextColor(ITEM_QUALITY_COLORS[quality].r, ITEM_QUALITY_COLORS[quality].g, ITEM_QUALITY_COLORS[quality].b);
 					-- Grayout items
 					if ( quantity < currencyNeeded ) then
@@ -131,7 +133,7 @@ function GarrisonCapacitiveDisplayFrame_Update(self, success, maxShipments, owne
 					quantity = AbbreviateNumbers(quantity);
 					reagent.Count:SetText(quantity.." /"..currencyNeeded);
 					--fix text overflow when the reagent count is too high
-					if (math.floor(reagent.Count:GetStringWidth()) > math.floor(reagent.Icon:GetWidth() + .5)) then 
+					if (math.floor(reagent.Count:GetStringWidth()) > math.floor(reagent.Icon:GetWidth() + .5)) then
 					--round count width down because the leftmost number can overflow slightly without looking bad
 					--round icon width because it should always be an int, but sometimes it's a slightly off float
 						reagent.Count:SetText(quantity.."\n/"..currencyNeeded);
@@ -162,7 +164,7 @@ function GarrisonCapacitiveDisplayFrame_Update(self, success, maxShipments, owne
 		self.StartWorkOrderButton:SetWidth(averageButtonWidth - buttonDiffOverTwo);
 
 		if (not quality) then
-			quality = LE_ITEM_QUALITY_COMMON;
+			quality = Enum.ItemQuality.Common;
 		end
 
 		if (not duration) then
@@ -175,11 +177,11 @@ function GarrisonCapacitiveDisplayFrame_Update(self, success, maxShipments, owne
 
 		self.TitleText:SetText(buildingName);
 		self.StartWorkOrderButton:SetEnabled(self.available > 0);
-		
-		if ( UnitExists("npc") ) then
-			SetPortraitTexture(self.portrait, "npc");
+
+		if UnitExists("npc") then
+			self:SetPortraitToUnit("npc");
 		else
-			self.portrait:SetTexture("Interface\\QuestFrame\\UI-QuestLog-BookIcon");
+			self:SetPortraitToAsset("Interface\\QuestFrame\\UI-QuestLog-BookIcon");
 		end
 
 	    local followerName = C_Garrison.GetFollowerInfoForBuilding(self.plotID);
@@ -268,7 +270,7 @@ function GarrisonCapacitiveDisplayFrame_OnEvent(self, event, ...)
 	elseif (event == "SHIPMENT_CRAFTER_INFO") then
 		local success, _, maxShipments, ownedShipments, plotID = ...;
 
-		GarrisonCapacitiveDisplayFrame_Update(self, success, maxShipments, ownedShipments, plotID);		
+		GarrisonCapacitiveDisplayFrame_Update(self, success, maxShipments, ownedShipments, plotID);
 	elseif (event == "SHIPMENT_CRAFTER_CLOSED") then
 		self.containerID = nil;
 
@@ -292,7 +294,7 @@ function GarrisonCapacitiveDisplayFrame_OnEvent(self, event, ...)
 end
 
 function GarrisonCapacitiveDisplayFrame_OnShow(self)
-	PlaySound("UI_Garrison_Shipments_Window_Open");
+	PlaySound(SOUNDKIT.UI_GARRISON_SHIPMENTS_WINDOW_OPEN);
 	self.Count:SetNumber(1);
 end
 
@@ -302,12 +304,12 @@ function GarrisonCapacitiveDisplayFrame_OnHide(self)
 		shipmentUpdater = nil;
 	end
 	C_Garrison.CloseTradeskillCrafter();
-	PlaySound("UI_Garrison_Shipments_Window_Close");
+	PlaySound(SOUNDKIT.UI_GARRISON_SHIPMENTS_WINDOW_CLOSE);
 end
 
 function GarrisonCapacitiveStartWorkOrder_OnClick(self)
 	C_Garrison.RequestShipmentCreation(GarrisonCapacitiveDisplayFrame.requested);
-	PlaySound("UI_Garrison_Start_Work_Order");
+	PlaySound(SOUNDKIT.UI_GARRISON_START_WORK_ORDER);
 	GarrisonCapacitiveDisplayFrame.Count:SetNumber(1);
 end
 
@@ -315,7 +317,7 @@ function GarrisonCapacitiveCreateAllWorkOrders_OnClick(self)
 	local available = GarrisonCapacitiveDisplayFrame.available;
 	if (available and available > 0) then
 		C_Garrison.RequestShipmentCreation(available);
-		PlaySound("UI_Garrison_Start_Work_Order");
+		PlaySound(SOUNDKIT.UI_GARRISON_START_WORK_ORDER);
 	end
 	GarrisonCapacitiveDisplayFrame.Count:SetNumber(1);
 end

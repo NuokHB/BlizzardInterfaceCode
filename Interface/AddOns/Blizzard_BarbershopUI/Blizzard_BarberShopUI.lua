@@ -1,142 +1,212 @@
-STYLE_HAIR_STYLE = 1;
-STYLE_HAIR_COLOR = 2;
-STYLE_FACIAL_HAIR = 3;
-STYLE_SKIN = 4;
-STYLE_FACE = 5;
-STYLE_CUSTOM_DISPLAY1 = 6;
-STYLE_CUSTOM_DISPLAY2 = 7;
-STYLE_CUSTOM_DISPLAY3 = 8;
-STYLE_CUSTOM_DISPLAY4 = 9;
-STYLE_NUM_CUSTOM_DISPLAY = 4;
+BarberShopMixin = CreateFromMixins(CharCustomizeParentFrameBaseMixin);
 
-function BarberShop_OnLoad(self)
-	BarberShop_UpdateHairCustomization(self);
-	BarberShop_UpdateFacialHairCustomization(self);
+function BarberShopMixin:OnLoad()
+	self:RegisterEvent("BARBER_SHOP_RESULT");
+	self:RegisterEvent("BARBER_SHOP_COST_UPDATE");
+	self:RegisterEvent("BARBER_SHOP_FORCE_CUSTOMIZATIONS_UPDATE");
 	self:RegisterEvent("BARBER_SHOP_APPEARANCE_APPLIED");
-	self:RegisterEvent("BARBER_SHOP_SUCCESS");
-	
-	if ( IsBarberShopStyleValid(STYLE_SKIN) ) then
-		if ( IsBarberShopStyleValid(STYLE_HAIR_COLOR) ) then
-			-- tauren, worgen, female pandaren
-			self.SkinColorSelector:Show();
-		else
-			-- male pandaren
-			self.HairColorSelector:Hide();
-			self.SkinColorSelector:Show();
+
+	CharCustomizeFrame:AttachToParentFrame(self);
+	CharCustomizeFrame.RandomizeAppearanceButton:Hide();
+
+	self.sexButtonPool = CreateFramePool("CHECKBUTTON", self.Sexes, "CharCustomizeSexButtonTemplate");
+end
+
+function BarberShopMixin:OnEvent(event, ...)
+	if event == "BARBER_SHOP_RESULT" then
+		local success = ...;
+		if success then
+			PlaySound(SOUNDKIT.BARBERSHOP_HAIRCUT);
+		end
+	elseif event == "BARBER_SHOP_COST_UPDATE" then
+		self:UpdatePrice();
+	elseif event == "BARBER_SHOP_FORCE_CUSTOMIZATIONS_UPDATE" then
+		self:UpdateCharCustomizationFrame();
+	elseif event == "BARBER_SHOP_APPEARANCE_APPLIED" then
+		self:Cancel();
+	elseif event == "BARBER_SHOP_CAMERA_VALUES_UPDATED" then
+		self:ResetCharacterRotation();
+		CharCustomizeFrame:UpdateCameraMode();
+		self:UnregisterEvent("BARBER_SHOP_CAMERA_VALUES_UPDATED");
+	end
+end
+
+function BarberShopMixin:OnShow()
+	self.oldErrorFramePointInfo = {UIErrorsFrame:GetPoint()};
+
+	UIErrorsFrame:SetParent(self);
+	UIErrorsFrame:SetFrameStrata("DIALOG");
+	UIErrorsFrame:ClearAllPoints();
+	UIErrorsFrame:SetPoint("TOP", self.Sexes, "BOTTOM", 0, 0);
+
+	ActionStatus:SetParent(self);
+
+	self:UpdateSex();
+
+	local reset = true;
+	self:UpdateCharCustomizationFrame(reset);
+
+	PlaySound(SOUNDKIT.BARBERSHOP_SIT);
+end
+
+function BarberShopMixin:UpdateSex()
+	self.sexButtonPool:ReleaseAll();
+
+	local currentCharacterData = C_BarberShop.GetCurrentCharacterData();
+	if currentCharacterData then
+		CharCustomizeFrame:SetSelectedData(currentCharacterData.raceData, currentCharacterData.sex, C_BarberShop.IsViewingAlteredForm());
+
+		local sexes = {Enum.Unitsex.Male, Enum.Unitsex.Female};
+		for index, sexID in ipairs(sexes) do
+			local button = self.sexButtonPool:Acquire();
+			button:SetSex(sexID, currentCharacterData.sex, index);
+			button:Show();
 		end
 	end
-	
-	BarberShop_UpdateCustomDisplays(self)
+
+	self.Sexes:MarkDirty();
+	self.Sexes:Show();
 end
 
-function BarberShop_OnShow(self)
-	CloseAllBags();
-	BarberShop_ResetLabelColors();
-	BarberShop_UpdateCost(self);
-	if ( BarberShopBannerFrame ) then
-		BarberShopBannerFrame:Show();
-		BarberShopBannerFrame.caption:SetText(BARBERSHOP);
-	end
-	self:ClearAllPoints();
-	self:SetPoint("RIGHT", min(-50, -CONTAINER_OFFSET_X), -50);
-	if ( HasAlternateForm() ) then
-		local model = BarberShopAltFormFrame;
-		model:Show();
-		model:SetRotation(-0.4);
-		model.rotation = -0.4;
-		if (UnitSex("player") == 2) then
-			model:SetPosition(0, 0.05, -0.03);
-		else
-			model:SetPosition(0, 0, -0.05);
-		end
-		model:SetPortraitZoom(0.9);
-		SetBarberShopAlternateFormFrame("BarberShopAltFormFrame");
-	else
-		BarberShopAltFormFrame:Hide();
-	end
+function BarberShopMixin:OnHide()
+	UIErrorsFrame:SetParent(UIParent);
+	UIErrorsFrame:SetFrameStrata("DIALOG");
+	UIErrorsFrame:ClearAllPoints();
+	UIErrorsFrame:SetPoint(unpack(self.oldErrorFramePointInfo));
 
-	PlaySound("BarberShop_Sit");
-	
-	ObjectiveTrackerFrame:Hide();
+	ActionStatus:SetParent(UIParent);
+
+	self:UnregisterEvent("BARBER_SHOP_CAMERA_VALUES_UPDATED");
 end
 
-function BarberShop_OnHide(self)
-	BarberShopBannerFrame:Hide();
-
-	ObjectiveTrackerFrame:Show();
-end
-
-function BarberShop_OnEvent(self, event, ...)
-	if(event == "BARBER_SHOP_SUCCESS") then
-		PlaySound("Barbershop_Haircut");
-	end
-	BarberShop_Update(self);
-end
-
-function BarberShop_UpdateCost(self)
-	MoneyFrame_Update(BarberShopFrameMoneyFrame:GetName(), GetBarberShopTotalCost());
-	-- The 4th return from GetBarberShopStyleInfo is whether the selected style is the active character style
-	-- Enable the okay and reset buttons if anything has changed
-	for i=1, #self.Selector do
-		if ( self.Selector[i]:IsShown() ) then
-			if ( not select(4, GetBarberShopStyleInfo( self.Selector[i]:GetID() ) ) ) then
-				BarberShopFrameOkayButton:Enable();
-				BarberShopFrameResetButton:Enable();
-				return;
-			end
-		end
-	end
-	BarberShopFrameOkayButton:Disable();
-	BarberShopFrameResetButton:Disable();
-end
-
-function BarberShop_UpdateBanner(name)
-	if ( name and name ~= "" ) then
-		BarberShopBannerFrameCaption:SetText(name);
+function BarberShopMixin:OnKeyDown(key)
+	local keybind = GetBindingFromClick(key);
+	if key == "ESCAPE" then
+		C_BarberShop.Cancel();
+	elseif keybind == "TOGGLEMUSIC" or keybind == "TOGGLESOUND" or keybind == "SCREENSHOT" then
+		RunBinding(keybind);
 	end
 end
 
-function BarberShop_Update(self)
-	BarberShop_UpdateCost(self);
-	for i=1, #self.Selector do
-		BarberShop_UpdateSelector(self.Selector[i]);
+function BarberShopMixin:Cancel()
+	HideUIPanel(self);
+	C_BarberShop.Cancel();
+end
+
+function BarberShopMixin:Reset()
+	C_BarberShop.ResetCustomizationChoices();
+	local currentCharacterData = C_BarberShop.GetCurrentCharacterData();
+	self:SetCharacterSex(currentCharacterData.sex)
+	self:UpdateCharCustomizationFrame();
+end
+
+function BarberShopMixin:ApplyChanges()
+	C_BarberShop.ApplyCustomizationChoices();
+end
+
+function BarberShopMixin:UpdatePrice()
+	local currentCost = C_BarberShop.GetCurrentCost();
+	local copperCost = currentCost % 100;
+	if copperCost > 0 then
+		-- Round any copper cost up to the next silver
+		currentCost = currentCost - copperCost + 100;
 	end
+
+	self.PriceFrame:SetAmount(currentCost);
+
+	local hasAnyChanges = C_BarberShop.HasAnyChanges();
+	self.AcceptButton:SetEnabled(hasAnyChanges);
+	self.ResetButton:SetEnabled(hasAnyChanges);
 end
 
-function BarberShop_UpdateSelector(self)
-	local name, _, _, isCurrent = GetBarberShopStyleInfo(self:GetID());
-	BarberShop_UpdateBanner(name);
-	BarberShop_SetLabelColor(self.Category, isCurrent);
-	BarberShop_UpdateCustomDisplays(self:GetParent());
-end
-
-function BarberShop_UpdateHairCustomization(self)
-	local hairCustomization = GetHairCustomization();
-	self.HairStyleSelector.Category:SetText(_G["HAIR_"..hairCustomization.."_STYLE"]);
-	self.HairColorSelector.Category:SetText(_G["HAIR_"..hairCustomization.."_COLOR"]);
-end
-
-function BarberShop_UpdateFacialHairCustomization(self)
-	self.FacialHairSelector.Category:SetText(_G["FACIAL_HAIR_"..GetFacialHairCustomization()]);
-end
-
-function BarberShop_SetLabelColor(label, isCurrent)
-	if ( isCurrent ) then
-		label:SetTextColor(HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b);
-	else
-		label:SetTextColor(NORMAL_FONT_COLOR.r, NORMAL_FONT_COLOR.g, NORMAL_FONT_COLOR.b);
+function BarberShopMixin:UpdateCharCustomizationFrame(alsoReset)
+	local customizationCategoryData = C_BarberShop.GetAvailableCustomizations();
+	if not customizationCategoryData then
+		-- This means we are calling GetAvailableCustomizations when there is no character component set up. Do nothing
+		return;
 	end
+
+	if alsoReset then
+		CharCustomizeFrame:Reset();
+	end
+
+	CharCustomizeFrame:SetCustomizations(customizationCategoryData);
+
+	self:UpdatePrice();
 end
 
-function BarberShop_ResetLabelColors()
-	for i=1, #BarberShopFrame.Selector do
-		BarberShop_SetLabelColor(BarberShopFrame.Selector[i].Category, i);
-	end
+function BarberShopMixin:SetCustomizationChoice(optionID, choiceID)
+	C_BarberShop.SetCustomizationChoice(optionID, choiceID);
+
+	-- When a customization choice is made, that may force other options to change (if the current choices are no longer valid)
+	-- So grab all the latest data and update CharCustomizationFrame
+	self:UpdateCharCustomizationFrame();
 end
 
-function BarberShop_UpdateCustomDisplays(self)
-	for i = STYLE_CUSTOM_DISPLAY1, (STYLE_CUSTOM_DISPLAY1 + STYLE_NUM_CUSTOM_DISPLAY - 1) do
-		self.Selector[i]:SetShown(IsBarberShopStyleValid(i));
+function BarberShopMixin:ResetCustomizationPreview()
+	C_BarberShop.ClearPreviewChoices();
+end
+
+function BarberShopMixin:PreviewCustomizationChoice(optionID, choiceID)
+	-- It is important that we DON'T call UpdateCharCustomizationFrame here because we want to keep the current selections
+	C_BarberShop.PreviewCustomizationChoice(optionID, choiceID);
+end
+
+function BarberShopMixin:GetCurrentCameraZoom()
+	return C_BarberShop.GetCurrentCameraZoom();
+end
+
+function BarberShopMixin:SetCameraZoomLevel(zoomLevel, keepCustomZoom)
+	C_BarberShop.SetCameraZoomLevel(zoomLevel, keepCustomZoom);
+end
+
+function BarberShopMixin:ZoomCamera(zoomAmount)
+	C_BarberShop.ZoomCamera(zoomAmount);
+end
+
+function BarberShopMixin:RotateCharacter(rotationAmount)
+	C_BarberShop.RotateCamera(rotationAmount);
+end
+
+function BarberShopMixin:ResetCharacterRotation()
+	C_BarberShop.ResetCameraRotation();
+end
+
+function BarberShopMixin:SetViewingAlteredForm(viewingAlteredForm, resetCategory)
+	self:RegisterEvent("BARBER_SHOP_CAMERA_VALUES_UPDATED");
+	C_BarberShop.SetViewingAlteredForm(viewingAlteredForm);
+	self:UpdateCharCustomizationFrame(resetCategory);
+end
+
+function BarberShopMixin:SetViewingShapeshiftForm(formID)
+	self:RegisterEvent("BARBER_SHOP_CAMERA_VALUES_UPDATED");
+	C_BarberShop.SetViewingShapeshiftForm(formID);
+	self.Sexes:SetShown(formID == nil);
+end
+
+function BarberShopMixin:SetModelDressState(dressedState)
+	C_BarberShop.SetModelDressState(dressedState);
+end
+
+function BarberShopMixin:SetCameraDistanceOffset(offset)
+	C_BarberShop.SetCameraDistanceOffset(offset);
+end
+
+function BarberShopMixin:SetCharacterSex(sexID)
+	-- We need to reset the zoom and rotation, but only AFTER the model has completed loading and we have the new custom rotation values
+	self:RegisterEvent("BARBER_SHOP_CAMERA_VALUES_UPDATED");
+
+	C_BarberShop.SetSelectedSex(sexID);
+	self:UpdateSex();
+end
+
+BarberShopButtonMixin = {};
+
+function BarberShopButtonMixin:OnClick()
+	PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON);
+	if self.barberShopOnClickMethod then
+		BarberShopFrame[self.barberShopOnClickMethod](BarberShopFrame);
+	elseif self.barberShopFunction then
+		C_BarberShop[self.barberShopFunction]();
 	end
-	self:Layout();
 end

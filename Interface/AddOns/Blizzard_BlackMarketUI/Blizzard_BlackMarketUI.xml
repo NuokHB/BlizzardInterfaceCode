@@ -1,7 +1,7 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/
 ..\..\FrameXML\UI.xsd">
 	<Script file="Blizzard_BlackMarketUI.lua"/>
-	
+
 <!--
 	<Button name="BlackMarketColumnButtonTemplate" virtual="true">
 		<Layers>
@@ -182,6 +182,14 @@
 							<Color r="0" g="0.8" b="1"/>
 						</Texture>
 					</Layer>
+					<Layer level="OVERLAY" textureSubLevel="1">
+						<Texture parentKey="IconOverlay" hidden="true">
+							<Size x="34" y="34"/>
+							<Anchors>
+								<Anchor point="CENTER"/>
+							</Anchors>
+						</Texture>
+					</Layer>
 				</Layers>
 				<Scripts>
 					<OnEnter>
@@ -254,7 +262,7 @@
 					</OnClick>
 				</Scripts>
 			</Button>
-			<Frame parentkey="CurrentBid" name="$parentCurrentBidMoneyFrame" inherits="SmallMoneyFrameTemplate">
+			<Frame parentKey="CurrentBid" name="$parentCurrentBidMoneyFrame" inherits="SmallMoneyFrameTemplate">
 				<Anchors>
 					<Anchor point="RIGHT" x="6" y="-3"/>
 				</Anchors>
@@ -280,28 +288,28 @@
 				<Anchor point="TOPLEFT" x="33" y="0"/>
 				<Anchor point="BOTTOMRIGHT" x="0" y="5"/>
 			</Anchors>
-			<Color r="0.243" g="0.570" b="1"/>
+			<Color color="HIGHLIGHT_LIGHT_BLUE" />
 		</HighlightTexture>
 	</Button>
 
 	<Texture name="_WoodFrameTile-Top" file="Interface\BlackMarket\_WoodFrame-TileHorizontal" virtual="true" horizTile="true" >
-		<Size x="256" y="28"/>	
-		<TexCoords left="0.00000000" right="1.00000000" top="0.01562500" bottom="0.45312500"/>	
+		<Size x="256" y="28"/>
+		<TexCoords left="0.00000000" right="1.00000000" top="0.01562500" bottom="0.45312500"/>
 	</Texture>
 
 	<Texture name="_WoodFrameTile-Bottom" file="Interface\BlackMarket\_WoodFrame-TileHorizontal" virtual="true" horizTile="true" >
-		<Size x="256" y="28"/>	
-		<TexCoords left="0.00000000" right="1.00000000" top="0.48437500" bottom="0.92187500"/>	
+		<Size x="256" y="28"/>
+		<TexCoords left="0.00000000" right="1.00000000" top="0.48437500" bottom="0.92187500"/>
 	</Texture>
 
 	<Texture name="!WoodFrameTile-Left" file="Interface\BlackMarket\!WoodFrame-TileVertical" virtual="true" vertTile="true" >
-		<Size x="28" y="256"/>	
-		<TexCoords left="0.01562500" right="0.45312500" top="0.00000000" bottom="1.00000000"/>	
+		<Size x="28" y="256"/>
+		<TexCoords left="0.01562500" right="0.45312500" top="0.00000000" bottom="1.00000000"/>
 	</Texture>
 
 	<Texture name="!WoodFrameTile-Right" file="Interface\BlackMarket\!WoodFrame-TileVertical" virtual="true" vertTile="true" >
-		<Size x="28" y="256"/>	
-		<TexCoords left="0.48437500" right="0.92187500" top="0.00000000" bottom="1.00000000"/>	
+		<Size x="28" y="256"/>
+		<TexCoords left="0.48437500" right="0.92187500" top="0.00000000" bottom="1.00000000"/>
 	</Texture>
 
 	<Frame name="WoodFrameTemplate" inherits="BaseBasicFrameTemplate" virtual="true">
@@ -376,7 +384,7 @@
 			</Layer>
 		</Layers>
 	</Frame>
-	
+
 	<Frame name="BlackMarketFrame" inherits="WoodFrameTemplate" toplevel="true" parent="UIParent" hidden="true" enableMouse="true">
 		<Size x="890" y="504"/>
 		<Layers>
@@ -426,7 +434,7 @@
 					</Layer>
 				</Layers>
 				<Frames>
-					<EditBox parentKey="SearchName" autoFocus="false" inherits="InputBoxTemplate">
+					<EditBox parentKey="SearchName" autoFocus="false" inherits="InputBoxTemplate" bytes="64">
 						<Size x="140" y="16"/>
 						<Anchors>
 							<Anchor point="TOPLEFT" relativeKey="$parent.SearchNameText" relativePoint="BOTTOMLEFT" x="3" y="-6"/>
@@ -443,7 +451,7 @@
 								self:ClearFocus();
 							</OnEnterPressed>
 						</Scripts>
-						<FontString inherits="ChatFontNormal" bytes="64"/>
+						<FontString inherits="ChatFontNormal"/>
 					</EditBox>
 					<EditBox parentKey="SearchMinLevel" name="BlackMarketMinLevel" letters="2" numeric="true" autoFocus="false" inherits="InputBoxTemplate">
 						<Size x="25" y="16"/>
@@ -507,7 +515,7 @@
 								self.text:SetText(USABLE_ITEMS);
 							</OnLoad>
 							<OnClick>
-								PlaySound("igMainMenuOptionCheckBoxOn");
+								PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON);
 							</OnClick>
 						</Scripts>
 					</CheckButton>
@@ -525,7 +533,7 @@
 								self:SetChecked(GetCVarBool("auctionDisplayOnCharacter"));
 							</OnShow>
 							<OnClick>
-								PlaySound("igMainMenuOptionCheckBoxOn");
+								PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON);
 								SetCVar("auctionDisplayOnCharacter", self:GetChecked());
 							</OnClick>
 							<OnEnter>
@@ -561,7 +569,7 @@
 						</Layers>
 						<Scripts>
 							<OnClick>
-								PlaySound("igMainMenuOptionCheckBoxOn");
+								PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON);
 							</OnClick>
 						</Scripts>
 						<NormalTexture file="Interface\Buttons\UI-SpellbookIcon-PrevPage-Up"/>
@@ -586,7 +594,7 @@
 						</Layers>
 						<Scripts>
 							<OnClick>
-								PlaySound("igMainMenuOptionCheckBoxOn");
+								PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON);
 							</OnClick>
 						</Scripts>
 						<NormalTexture file="Interface\Buttons\UI-SpellbookIcon-NextPage-Up"/>
@@ -607,7 +615,7 @@
 <!--
 						<Texture setAllPoints="true">
 							<Color r="0" g="0" b="0" a="0.75"/>
-						</Texture>		
+						</Texture>
 -->
 						<FontString parentKey="Title" inherits="QuestFont_Super_Huge" justifyH="CENTER" text="HOT_ITEM">
 							<Anchors>
@@ -697,6 +705,14 @@
 									<Color r="0" g="0.8" b="1"/>
 								</Texture>
 							</Layer>
+							<Layer level="OVERLAY" textureSubLevel="1">
+								<Texture parentKey="IconOverlay" hidden="true">
+									<Size x="35" y="35"/>
+									<Anchors>
+										<Anchor point="CENTER"/>
+									</Anchors>
+								</Texture>
+							</Layer>
 						</Layers>
 						<Scripts>
 							<OnEnter>
@@ -744,7 +760,7 @@
 							</OnLeave>
 						</Scripts>
 					</Frame>
-					<Frame parentkey="BlackMarketHotItemBidPrice" name="HotItemCurrentBidMoneyFrame" inherits="SmallMoneyFrameTemplate">
+					<Frame parentKey="BlackMarketHotItemBidPrice" name="HotItemCurrentBidMoneyFrame" inherits="SmallMoneyFrameTemplate">
 						<Anchors>
 							<Anchor point="TOPLEFT" relativeKey="$parent.TimeLeft" relativePoint="BOTTOM" x="0" y="-5"/>
 						</Anchors>
@@ -850,7 +866,7 @@
 					<Layer level="BACKGROUND">
 						<Texture setAllPoints="true">
 							<Color r="0" g="0" b="0" a="0.5"/>
-						</Texture>		
+						</Texture>
 					</Layer>
 					<Layer level="OVERLAY">
 						<FontString parentKey="NoItems" inherits="QuestFont_Super_Huge" justifyH="CENTER" hidden="true" text="BLACK_MARKET_NO_ITEMS">

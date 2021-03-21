@@ -38,14 +38,18 @@ StaticPopupDialogs["NOT_ENOUGH_POWER_ARTIFACT_RESPEC"] = {
 }
 
 function ArtifactUI_CanViewArtifact()
-	return C_ArtifactUI.IsAtForge() or C_ArtifactUI.GetTotalPurchasedRanks() > 0 or C_ArtifactUI.GetNumObtainedArtifacts() > 1;
+	return C_ArtifactUI.IsAtForge() or ArtifactUI_HasPurchasedAnything() or C_ArtifactUI.IsArtifactDisabled() or C_ArtifactUI.GetNumObtainedArtifacts() > 1;
+end
+
+function ArtifactUI_HasPurchasedAnything()
+	return C_ArtifactUI.GetTotalPurchasedRanks() > 0 or C_ArtifactUI.IsMaxedByRulesOrEffect();
 end
 
 local TAB_PERKS = 1;
 local TAB_APPEARANCE = 2;
 local TAB_CHALLENGES = 3;
 
-local PERK_PANEL_WIDTH = 720;
+local PERK_PANEL_WIDTH = 896;
 local STANDARD_PANEL_WIDTH = 460;
 
 ArtifactUIMixin = {}
@@ -59,26 +63,39 @@ function ArtifactUIMixin:OnLoad()
 	PanelTemplates_SetNumTabs(self, 2);
 
 	self:RegisterEvent("ARTIFACT_UPDATE");
-	self:RegisterEvent("ARTIFACT_XP_UPDATE");
 	self:RegisterEvent("ARTIFACT_CLOSE");
-	self:RegisterEvent("ARTIFACT_MAX_RANKS_UPDATE");
 end
 
 function ArtifactUIMixin:OnShow()
-	PlaySound("igCharacterInfoOpen");
+	PlaySound(SOUNDKIT.IG_CHARACTER_INFO_OPEN);
+
+	if self.queueTier2UpgradeAnim then
+		self.queueTier2UpgradeAnim = nil;
+		-- Play anim
+	end
 
 	self:EvaulateForgeState();
 	self:SetupPerArtifactData();
 	self:RefreshKnowledgeRanks();
-	self.PerksTab:Refresh(true);
+	self.PerksTab:OnUIOpened();
+
+	self:RegisterEvent("ARTIFACT_XP_UPDATE");
+	self:RegisterEvent("ARTIFACT_RELIC_INFO_RECEIVED");
+	self:RegisterEvent("UI_SCALE_CHANGED");
+	self:RegisterEvent("DISPLAY_SIZE_CHANGED");
 end
 
 function ArtifactUIMixin:OnHide()
 	ArtifactFrameUnderlay:Hide();
-	PlaySound("igCharacterInfoClose");
+	PlaySound(SOUNDKIT.IG_CHARACTER_INFO_CLOSE);
 	C_ArtifactUI.Clear();
 
 	StaticPopup_Hide("CONFIRM_ARTIFACT_RESPEC");
+
+	self:UnregisterEvent("ARTIFACT_XP_UPDATE");
+	self:UnregisterEvent("ARTIFACT_RELIC_INFO_RECEIVED");
+	self:UnregisterEvent("UI_SCALE_CHANGED");
+	self:UnregisterEvent("DISPLAY_SIZE_CHANGED");
 end
 
 function ArtifactUIMixin:OnEvent(event, ...)
@@ -95,16 +112,22 @@ function ArtifactUIMixin:OnEvent(event, ...)
 				self:SetupPerArtifactData();
 			end
 			self.PerksTab:Refresh(newItem);
-		else
+		elseif ( not C_ArtifactRelicForgeUI.IsAtForge() ) then
 			ShowUIPanel(self);
 		end
 	elseif event == "ARTIFACT_XP_UPDATE" then
-		if self:IsShown() then
-			self.PerksTab:Refresh();
-		end
+		self.PerksTab:Refresh();
 	elseif event == "ARTIFACT_CLOSE" then
 		HideUIPanel(self);
+	elseif event == "ARTIFACT_RELIC_INFO_RECEIVED" then
+		self.PerksTab:Refresh(false);
+	elseif event == "UI_SCALE_CHANGED" or event == "DISPLAY_SIZE_CHANGED" then
+		self.PerksTab:Refresh(true);
 	end
+end
+
+function ArtifactUIMixin:OnTraitsRefunded(numRefunded, refundedTier)
+	self.PerksTab:OnTraitsRefunded(numRefunded, refundedTier);
 end
 
 function ArtifactUIMixin:OnAppearanceChanging()
@@ -143,10 +166,18 @@ function ArtifactUIMixin:EvaulateForgeState()
 
 	if isAtForge and not self.AppearancesTab:IsShown() and not GetCVarBitfield("closedInfoFrames", LE_FRAME_TUTORIAL_ARTIFACT_APPEARANCE_TAB) and C_ArtifactUI.GetTotalPurchasedRanks() > 0 then
 		if GetNumUnlockedAppearances() > 1 then
-			self.AppearanceTabHelpBox:Show();
+			local helpTipInfo = {
+				text = ARTIFACT_TUTORIAL_CUSTOMIZE_APPEARANCE,
+				buttonStyle = HelpTip.ButtonStyle.Close,
+				cvarBitfield = "closedInfoFrames",
+				bitfieldFlag = LE_FRAME_TUTORIAL_ARTIFACT_APPEARANCE_TAB,
+				targetPoint = HelpTip.Point.TopEdgeCenter,
+				offsetY = -7,
+			};
+			HelpTip:Show(self, helpTipInfo, self.AppearancesTabButton);
 		end
 	else
-		self.AppearanceTabHelpBox:Hide();
+		HelpTip:Hide(self, ARTIFACT_TUTORIAL_CUSTOMIZE_APPEARANCE);
 	end
 
 	ArtifactFrameUnderlay:SetShown(isAtForge);
@@ -165,7 +196,7 @@ function ArtifactUIMixin:SetTab(id)
 	UpdateUIPanelPositions(self);
 
 	if id == TAB_APPEARANCE then
-		self.AppearanceTabHelpBox:Hide();
+		HelpTip:Hide(self, ARTIFACT_TUTORIAL_CUSTOMIZE_APPEARANCE);
 		SetCVarBitfield("closedInfoFrames", LE_FRAME_TUTORIAL_ARTIFACT_APPEARANCE_TAB, true)
 	end
 
@@ -174,10 +205,9 @@ function ArtifactUIMixin:SetTab(id)
 end
 
 function ArtifactUIMixin:SetupPerArtifactData()
-	local textureKit, titleName, titleR, titleG, titleB, barConnectedR, barConnectedG, barConnectedB, barDisconnectedR, barDisconnectedG, barDisconnectedB = C_ArtifactUI.GetArtifactArtInfo();
-	if textureKit then
-		local classBadgeTexture = ("%s-ClassBadge"):format(textureKit);
-		self.ForgeBadgeFrame.ForgeClassBadgeIcon:SetAtlas(classBadgeTexture, true);
+	local _, _, _, icon = C_ArtifactUI.GetArtifactInfo();
+	if icon then
+		self.ForgeBadgeFrame.ItemIcon:SetTexture(icon);
 	end
 end
 
@@ -200,65 +230,60 @@ end
 
 function ArtifactUIMixin:RefreshKnowledgeRanks()
 	local totalRanks = C_ArtifactUI.GetTotalPurchasedRanks();
-	if totalRanks > 0 then
+	if totalRanks > 0 and not C_ArtifactUI.IsArtifactDisabled() then
 		self.ForgeBadgeFrame.ForgeLevelLabel:SetText(totalRanks);
 		self.ForgeBadgeFrame.ForgeLevelLabel:Show();
 		self.ForgeBadgeFrame.ForgeLevelBackground:Show();
 		self.ForgeBadgeFrame.ForgeLevelBackgroundBlack:Show();
 		self.ForgeLevelFrame:Show();
-
-		local knowledgeLevel = C_ArtifactUI.GetArtifactKnowledgeLevel();
-		if knowledgeLevel and knowledgeLevel > 0 and not GetCVarBitfield("closedInfoFrames", LE_FRAME_TUTORIAL_ARTIFACT_KNOWLEDGE) then
-			self.KnowledgeLevelHelpBox:Show();
-		end
 	else
 		self.ForgeBadgeFrame.ForgeLevelLabel:Hide();
 		self.ForgeBadgeFrame.ForgeLevelBackground:Hide();
 		self.ForgeBadgeFrame.ForgeLevelBackgroundBlack:Hide();
 		self.ForgeLevelFrame:Hide();
-		self.KnowledgeLevelHelpBox:Hide();
 	end
 end
 
 function ArtifactUIMixin:OnKnowledgeEnter(knowledgeFrame)
 	GameTooltip:SetOwner(knowledgeFrame, "ANCHOR_BOTTOMRIGHT", -25, 27);
-	local textureKit, titleName, titleR, titleG, titleB, barConnectedR, barConnectedG, barConnectedB, barDisconnectedR, barDisconnectedG, barDisconnectedB = C_ArtifactUI.GetArtifactArtInfo();
-	GameTooltip:SetText(titleName, titleR, titleG, titleB);
+	local artifactArtInfo = C_ArtifactUI.GetArtifactArtInfo();
+	local color = ITEM_QUALITY_COLORS[Enum.ItemQuality.Artifact];
+	GameTooltip:SetText(artifactArtInfo.titleName, color.r, color.g, color.b);
 
 	GameTooltip:AddLine(ARTIFACTS_NUM_PURCHASED_RANKS:format(C_ArtifactUI.GetTotalPurchasedRanks()), HIGHLIGHT_FONT_COLOR:GetRGB());
 
 	local addedAnyMetaPowers = MetaPowerTooltipHelper(C_ArtifactUI.GetMetaPowerInfo());
-
-	local knowledgeLevel = C_ArtifactUI.GetArtifactKnowledgeLevel();
-	if knowledgeLevel and knowledgeLevel > 0 then
-		local knowledgeMultiplier = C_ArtifactUI.GetArtifactKnowledgeMultiplier();
-		local percentIncrease = math.floor(((knowledgeMultiplier - 1.0) * 100) + .5);
-		if percentIncrease > 0.0 then
-			if addedAnyMetaPowers then
-				GameTooltip:AddLine(" ");
-			end
-
-			GameTooltip:AddLine(ARTIFACTS_KNOWLEDGE_TOOLTIP_LEVEL:format(knowledgeLevel), HIGHLIGHT_FONT_COLOR:GetRGB());
-			GameTooltip:AddLine(ARTIFACTS_KNOWLEDGE_TOOLTIP_DESC:format(BreakUpLargeNumbers(percentIncrease)), NORMAL_FONT_COLOR.r, NORMAL_FONT_COLOR.g, NORMAL_FONT_COLOR.b, true);
-		end
-	end
 	
+	knowledgeFrame.UpdateTooltip = function() self:OnKnowledgeEnter(knowledgeFrame); end;
 	GameTooltip:Show();
+end
+
+function ArtifactUIMixin:OnKnowledgeLeave(knowledgeFrame)
+	knowledgeFrame.UpdateTooltip = nil;
+	GameTooltip:Hide();
 end
 
 function ArtifactUIMixin:OnInventoryItemMouseEnter(bag, slot)
 	if self:IsVisible() then
-		local itemID = select(10, GetContainerItemInfo(bag, slot));
+		local itemInfo = {GetContainerItemInfo(bag, slot)};
+		local itemLink = itemInfo[7];
+		local itemID = itemInfo[10];
+
 		if itemID and IsArtifactRelicItem(itemID) and not CursorHasItem() then
-			self.PerksTab:ShowHighlightForRelicItemID(itemID);
+			self.PerksTab:ShowHighlightForRelicItemID(itemID, itemLink);
+			self.PerksTab.TitleContainer:RefreshRelicHighlights(itemID, itemLink);
 		end
 	end
 end
 
 function ArtifactUIMixin:OnInventoryItemMouseLeave(bag, slot)
-	local itemID = select(10, GetContainerItemInfo(bag, slot));
-	if itemID and IsArtifactRelicItem(itemID) and not CursorHasItem() then
-		self.PerksTab:HideHighlightForRelicItemID(itemID);
+	local itemInfo = {GetContainerItemInfo(bag, slot)};
+	local itemLink = itemInfo[7];
+	local itemID = itemInfo[10];
+
+	if itemID and IsArtifactRelicItem(itemID) and not CursorHasItem() and self.PerksTab:IsVisible() then
+		self.PerksTab:HideHighlightForRelicItemID(itemID, itemLink);
+		self.PerksTab.TitleContainer:RefreshRelicHighlights();
 	end
 end
 

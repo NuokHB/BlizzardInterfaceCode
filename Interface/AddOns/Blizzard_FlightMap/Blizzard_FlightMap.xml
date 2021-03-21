@@ -2,8 +2,11 @@
 ..\FrameXML\UI.xsd">
 	<Script file="Blizzard_FlightMap.lua"/>
 
-	<Frame name="FlightMapFrame" inherits="MapCanvasFrameTemplate" mixin="FlightMapMixin">
+	<Frame name="FlightMapFrame" parent="UIParent" inherits="MapCanvasFrameTemplate" mixin="FlightMapMixin">
 		<Size x="1004" y="689"/>
+		<Anchors>
+			<Anchor point="CENTER"/>
+		</Anchors>
 		<Frames>
 			<Frame parentKey="BorderFrame" inherits="PortraitFrameTemplate" frameStrata="HIGH" setAllPoints="true">
 				<Layers>
@@ -33,10 +36,10 @@
 			<ScrollFrame parentKey="ScrollContainer" inherits="MapCanvasFrameScrollContainerTemplate" />
 		</Frames>
 		<Scripts>
-			<OnLoad method="OnLoad" inherit="prepend"/>
-			<OnShow method="OnShow" inherit="append"/>
-			<OnEvent method="OnEvent" inherit="append"/>
-			<OnHide method="OnHide" inherit="append"/>
+			<OnLoad method="OnLoad"/>
+			<OnShow method="OnShow"/>
+			<OnEvent method="OnEvent"/>
+			<OnHide method="OnHide"/>
 		</Scripts>
 	</Frame>
 </Ui>

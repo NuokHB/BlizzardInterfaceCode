@@ -39,21 +39,21 @@ function DrawLine(texture, canvasFrame, startX, startY, endX, endY, lineWidth, l
 		boundingWidth = ((lineLength * cos) - (lineWidth * sin)) * lineFactor;
 		boundingHeight = ((lineWidth * cos) - (lineLength * sin)) * lineFactor;
 
-		bottomLeftX = (lineWidth / lineLength) * sinCos; 
+		bottomLeftX = (lineWidth / lineLength) * sinCos;
 		bottomLeftY = sin * sin;
 		bottomRightY = (lineLength / lineWidth) * sinCos;
 		bottomRightX = 1 - bottomLeftY;
 
 		topLeftX = bottomLeftY;
 		topLeftY = 1 - bottomRightY;
-		topRightX = 1 - bottomLeftX; 
+		topRightX = 1 - bottomLeftX;
 		topRightY = bottomRightX;
 	else
 		boundingWidth = ((lineLength * cos) + (lineWidth * sin)) * lineFactor;
 		boundingHeight = ((lineWidth * cos) + (lineLength * sin)) * lineFactor;
 
-		bottomLeftX = sin * sin; 
-		bottomLeftY = -(lineLength / lineWidth) * sinCos; 
+		bottomLeftX = sin * sin;
+		bottomLeftY = -(lineLength / lineWidth) * sinCos;
 		bottomRightX = 1 + (lineWidth / lineLength) * sinCos;
 		bottomRightY = bottomLeftX;
 
@@ -113,13 +113,6 @@ function AnimatedNumericFontStringMixin:SetAnimatedValue(value)
 	self.initialAnimatedValueDelta = math.abs(self.targetAnimatedValue - self.currentAnimatedValue);
 end
 
-local function Round(value)
-	if value < 0.0 then
-		return math.ceil(value - .5);
-	end
-	return math.floor(value + .5);
-end
-
 -- Stops animating the value and just snaps to it
 function AnimatedNumericFontStringMixin:SnapToTarget()
 	if self.targetAnimatedValue then
@@ -132,7 +125,7 @@ end
 -- Call this every frame
 function AnimatedNumericFontStringMixin:UpdateAnimatedValue(elapsed)
 	if self.targetAnimatedValue then
-		local change = self.initialAnimatedValueDelta * self:GetAnimatedDurationTimeSec() * elapsed;
+		local change = self.initialAnimatedValueDelta * (elapsed / self:GetAnimatedDurationTimeSec());
 		if math.abs(self.targetAnimatedValue - self.currentAnimatedValue) <= change then
 			self:SnapToTarget();
 		else
@@ -144,50 +137,199 @@ function AnimatedNumericFontStringMixin:UpdateAnimatedValue(elapsed)
 	end
 end
 
--- Mix this into a FontString to have it resize until it stops truncating, or gets too small
-ShrinkUntilTruncateFontStringMixin = {};
+SparseGridMixin = {};
 
--- From largest to smallest
-function ShrinkUntilTruncateFontStringMixin:SetFontObjectsToTry(...)
-	self.fontObjectsToTry = { ... };
-	if self:GetText() then
-		self:ApplyFontObjects();
+function SparseGridMixin:OnLoad(width, height)
+	self.width = width;
+	self.height = height;
+	self.cells = {};
+end
+
+function SparseGridMixin:SetCell(x, y, data)
+	if not self:IsInRange(x, y) then
+		error("index of out of range");
+	end
+
+	local linearIndex = self:CalculateLinearIndex(x, y);
+	self.cells[linearIndex] = data;
+end
+
+function SparseGridMixin:GetCell(x, y)
+	if not self:IsInRange(x, y) then
+		error("index of out of range");
+	end
+
+	local linearIndex = self:CalculateLinearIndex(x, y);
+	return self.cells[linearIndex];
+end
+
+function SparseGridMixin:IsInRange(x, y)
+	return x > 0 and x <= self.width and y > 0 and y <= self.height;
+end
+
+function SparseGridMixin:Clear()
+	wipe(self.cells);
+end
+
+function SparseGridMixin:CalculateLinearIndex(x, y)
+	return x + self.width * (y - 1);
+end
+
+-- Mix this in to make an object a doublyLinkedList
+DoublyLinkedListMixin = {nodeCount = 0};
+
+function DoublyLinkedListMixin:PushFront(nodeToInsert)
+	self:InsertBefore(nodeToInsert, self.front);
+end
+
+function DoublyLinkedListMixin:PushBack(nodeToInsert)
+	self:InsertAfter(nodeToInsert, self.back);
+end
+
+function DoublyLinkedListMixin:PopFront()
+	return self:Remove(self.front);
+end
+
+function DoublyLinkedListMixin:PopBack()
+	return self:Remove(self.back);
+end
+
+function DoublyLinkedListMixin:EnumerateNodes()
+	local index = 0;
+	local currentNode = self.front;
+
+	return function()
+		index = index + 1;
+		if currentNode then
+			local returnNode = currentNode;
+			currentNode = currentNode.next;
+			return index, returnNode;
+		else
+			return nil;
+		end
+	end;
+end
+
+function DoublyLinkedListMixin:EnumerateNodesReverse()
+	local index = 0;
+	local currentNode = self.back;
+
+	return function()
+		index = index + 1;
+		if currentNode then
+			local returnNode = currentNode;
+			currentNode = currentNode.prev;
+			return index, returnNode;
+		else
+			return nil;
+		end
+	end;
+end
+
+function DoublyLinkedListMixin:InsertBefore(nodeToInsert, listNode)
+	nodeToInsert.next = listNode;
+
+	if listNode then
+		if listNode.prev then
+			listNode.prev.next = nodeToInsert;
+		end
+
+		nodeToInsert.prev = listNode.prev;
+		listNode.prev = nodeToInsert;
+	end
+
+	if self.front == listNode then
+		self.front = nodeToInsert;
+	end
+
+	if not self.back then
+		self.back = nodeToInsert;
+	end
+
+	self.nodeCount = self.nodeCount + 1;
+end
+
+function DoublyLinkedListMixin:InsertAfter(nodeToInsert, listNode)
+	nodeToInsert.prev = listNode;
+
+	if listNode then
+		if listNode.next then
+			listNode.next.prev = nodeToInsert;
+		end
+
+		nodeToInsert.next = listNode.next;
+		listNode.next = nodeToInsert;
+	end
+
+	if self.back == listNode then
+		self.back = nodeToInsert;
+	end
+
+	if not self.front then
+		self.front = nodeToInsert;
+	end
+
+	self.nodeCount = self.nodeCount + 1;
+end
+
+function DoublyLinkedListMixin:Remove(node)
+	if node then
+		if self.front == node then
+			self.front = node.next;
+		end
+
+		if self.back == node then
+			self.back = node.prev;
+		end
+
+		if node.prev then
+			node.prev.next = node.next;
+		end
+
+		if node.next then
+			node.next.prev = node.prev;
+		end
+
+		node.prev = nil;
+		node.next = nil;
+
+		self.nodeCount = self.nodeCount - 1;
+	end
+
+	return node;
+end
+
+TextureLoadingGroupMixin = {};
+
+function TextureLoadingGroupMixin:AddTexture(texture)
+	self.textures = self.textures or {};
+	self.textures[texture] = true;
+end
+
+function TextureLoadingGroupMixin:RemoveTexture()
+	if self.textures then
+		self.textures[texture] = nil;
 	end
 end
 
-function ShrinkUntilTruncateFontStringMixin:ApplyFontObjects()
-	if not self.fontObjectsToTry then
-		error("No fonts applied to ShrinkUntilTruncateFontStringMixin, call SetFontObjectsToTry first");
-	end
-
-	for i, fontObject in ipairs(self.fontObjectsToTry) do
-		self:SetFontObject(fontObject);
-		if not self:IsTruncated() then
-			break;
-		end
-	end
+function TextureLoadingGroupMixin:Reset()
+	self.textures = nil;
 end
 
-function ShrinkUntilTruncateFontStringMixin:SetText(text)
-	if not self:GetFont() then
-		if not self.fontObjectsToTry then
-			error("No fonts applied to ShrinkUntilTruncateFontStringMixin, call SetFontObjectsToTry first");
-		end
-		self:SetFontObject(self.fontObjectsToTry[1]);
+function TextureLoadingGroupMixin:EnumerateTextures()
+	if self.textures then
+		return pairs(self.textures);
 	end
-
-	getmetatable(self).__index.SetText(self, text);
-	self:ApplyFontObjects();
+	return nop;
 end
 
-function ShrinkUntilTruncateFontStringMixin:SetFormattedText(format, ...)
-	if not self:GetFont() then
-		if not self.fontObjectsToTry then
-			error("No fonts applied to ShrinkUntilTruncateFontStringMixin, call SetFontObjectsToTry first");
+function TextureLoadingGroupMixin:IsFullyLoaded()
+	if self.textures then
+		for texture in pairs(self.textures) do
+			if not texture:IsObjectLoaded() then
+				return false;
+			end
 		end
-		self:SetFontObject(self.fontObjectsToTry[1]);
 	end
-
-	getmetatable(self).__index.SetFormattedText(self, format, ...);
-	self:ApplyFontObjects();
+	return true;
 end

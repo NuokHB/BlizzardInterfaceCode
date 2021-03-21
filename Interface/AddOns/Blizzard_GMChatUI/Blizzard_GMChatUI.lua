@@ -34,8 +34,6 @@ function GMChatFrame_OnLoad(self)
 	self.flashTimer = 0;
 	self.lastGM = {};
 
-	GMChatOpenLog:Enable();
-
 	self:SetClampRectInsets(-35, 0, 30, 0);
 
 	self:SetFont(DEFAULT_CHAT_FRAME:GetFont());
@@ -43,6 +41,7 @@ function GMChatFrame_OnLoad(self)
 	self.buttonFrame:SetAlpha(1);
 	self.buttonFrame.minimizeButton:Hide();
 
+	self.editBox:ClearAllPoints();
 	self.editBox:SetPoint("TOPRIGHT", self, "BOTTOMRIGHT", 8, -2);
 	self.editBox:SetPoint("TOPLEFT", self, "BOTTOMLEFT", -43, -2);
 	self.editBox.isGM = true;
@@ -65,7 +64,8 @@ function GMChatFrame_OnEvent(self, event, ...)
 			end
 		end
 
-		local body = format(CHAT_WHISPER_GET, pflag.."|HplayerGM:"..arg2..":"..arg11.."|h".."["..arg2.."]".."|h")..arg1;
+		local gmLink = GetGMLink(arg2, ("[%s]"):format(arg2), arg11);
+		local body = CHAT_WHISPER_GET:format(pflag..gmLink)..arg1;
 
 		ListOfGMs[strlower(arg2)] = true;
 		self:AddMessage(body, info.r, info.g, info.b, info.id);
@@ -79,13 +79,11 @@ function GMChatFrame_OnEvent(self, event, ...)
 			GMChatStatusFrame:Show();
 			GMChatStatusFrame.pulse:Play();
 			table.insert(self.lastGM,arg2);
-			PlaySound("GM_ChatWarning");
+			PlaySound(SOUNDKIT.GM_CHAT_WARNING);
 
 			DEFAULT_CHAT_FRAME:AddMessage(pflag.."|HGMChat|h["..GM_CHAT_STATUS_READY_DESCRIPTION.."]|h", info.r, info.g, info.b, info.id);
 			DEFAULT_CHAT_FRAME:SetHyperlinksEnabled(true);
 			DEFAULT_CHAT_FRAME.overrideHyperlinksEnabled = true;
-			MicroButtonPulse(HelpMicroButton, 3600);
-			SetButtonPulse(GMChatOpenLog, 3600, 1.0);
 		else
 			ChatEdit_SetLastTellTarget(arg2, "WHISPER");
 		end
@@ -103,7 +101,8 @@ function GMChatFrame_OnEvent(self, event, ...)
 			end
 		end
 
-		local body = format(CHAT_WHISPER_INFORM_GET, pflag.."|HplayerGM:"..arg2..":"..arg11.."|h".."["..arg2.."]".."|h")..arg1;
+		local gmLink = GetGMLink(arg2, ("[%s]"):format(arg2), arg11);
+		local body = CHAT_WHISPER_INFORM_GET:format(pflag..gmLink)..arg1;
 
 		self:AddMessage(body, info.r, info.g, info.b, info.id);
 	elseif ( event == "UPDATE_CHAT_COLOR" ) then
@@ -136,7 +135,6 @@ end
 
 function GMChatFrame_OnShow(self)
 	GMChatStatusFrame:Hide();
-	GMChatOpenLog:Disable();
 	for _,gmName in ipairs(self.lastGM) do
 		ChatEdit_SetLastTellTarget(gmName, "WHISPER");
 	end
@@ -147,15 +145,16 @@ function GMChatFrame_OnShow(self)
 		GMChatFrameEditBox:SetAttribute("chatType", "WHISPER");
 	end
 
-	MicroButtonPulseStop(HelpMicroButton);	--Stop the buttons from pulsing.
-	SetButtonPulse(GMChatOpenLog, 0, 1);
+	if ( GetCVarBool("chatMouseScroll") ) then
+		GMChatFrame:SetScript("OnMouseWheel", FloatingChatFrame_OnMouseScroll);
+		GMChatFrame:EnableMouseWheel(true);
+	end
 
 	self:SetScript("OnUpdate", GMChatFrame_OnUpdate);
 	self.editBox:Show();
 end
 
 function GMChatFrame_OnHide(self)
-	GMChatOpenLog:Enable();
 	SetCVar("lastTalkedToGM", "");
 	self.editBox:Hide();
 

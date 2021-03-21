@@ -1,7 +1,7 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/
 ..\FrameXML\UI.xsd">
     <Script file="BankFrame.lua"/>
-	<Button name="BankItemButtonGenericTemplate" inherits="ItemButtonTemplate" virtual="true">
+	<ItemButton name="BankItemButtonGenericTemplate" mixin="BankItemButtonMixin" virtual="true">
 		<Layers>
 			<Layer level="OVERLAY">
 				<Texture parentKey="IconQuestTexture">
@@ -36,17 +36,15 @@
                 BankFrameItemButtonGeneric_OnClick(self, "LeftButton");
             </OnReceiveDrag>
 		</Scripts>
-	</Button>
-	<Button name="BankItemButtonBagTemplate" inherits="ItemButtonTemplate" virtual="true">
+	</ItemButton>
+	<ItemButton name="BankItemButtonBagTemplate" mixin="BankItemButtonBagMixin" virtual="true">
+		<Layers>
+			<Layer level="OVERLAY">
+				<Texture parentKey="SlotHighlightTexture" alphaMode="ADD" file="Interface\Buttons\CheckButtonHilight" setAllPoints="true" hidden="true"/>
+			</Layer>
+		</Layers>
 		<Frames>
 			<Cooldown name="$parentCooldown" parentKey="Cooldown" inherits="CooldownFrameTemplate"/>
-			<Frame name="$parentHighlightFrame" parentKey="HighlightFrame" setAllPoints="true">
-				<Layers>
-					<Layer>
-						<Texture name="$parentTexture" parentKey="HighlightTexture" alphaMode="ADD" file="Interface\Buttons\CheckButtonHilight" setAllPoints="true" hidden="true"/>
-					</Layer>
-				</Layers>
-			</Frame>
 		</Frames>
 		<Scripts>
 			<OnLoad function="BankFrameBagButton_OnLoad"/>
@@ -70,12 +68,13 @@
 				BankFrameItemButtonBag_OnClick(self, nil);
 			</OnReceiveDrag>
 		</Scripts>
-	</Button>
-	<Button name="ReagentBankItemButtonGenericTemplate" inherits="BankItemButtonGenericTemplate" virtual="true">
+		<CheckedTexture alphaMode="ADD" file="Interface\Buttons\CheckButtonHilight"/>
+	</ItemButton>
+	<ItemButton name="ReagentBankItemButtonGenericTemplate" inherits="BankItemButtonGenericTemplate" virtual="true">
 		<Scripts>
 			<OnLoad function="ReagentBankFrameItemButton_OnLoad"/>
 		</Scripts>
-	</Button>
+	</ItemButton>
 	<Button name="BankAutoSortButtonTemplate" virtual="true">
 		<Size x="28" y="26"/>
 		<NormalTexture atlas="bags-button-autosort-up"/>
@@ -154,57 +153,6 @@
 					<OnClick function="BankFrame_TabOnClick"/>
                 </Scripts>
             </Button>
-
-			<Frame name="ReagentBankHelpBox" parentKey="GlowBox" inherits="GlowBoxTemplate" hidden="false" frameStrata="DIALOG" >
-				<Size x="220" y="65"/>
-				<Anchors>
-					<Anchor point="LEFT" relativePoint="RIGHT" relativeTo="$parentTab2" x="20" y="0"/>
-				</Anchors>
-				<Layers>
-					<Layer level="ARTWORK">
-						<FontString parentKey="BigText" inherits="GameFontHighlight" text="REAGENT_BANK_HELP" justifyH="LEFT">
-							<Size x="176" y="0"/>
-							<Anchors>
-								<Anchor point="TOP" x="-10" y="-12"/>
-							</Anchors>
-						</FontString>
-						<Texture parentKey="ArrowLEFT" inherits="HelpPlateArrowDOWN">
-							<Size x="53" y="21"/>
-							<Anchors>
-								<Anchor point="RIGHT" relativePoint="LEFT" x="3" y="0"/>
-							</Anchors>
-						</Texture>
-					</Layer>
-					<Layer level="BORDER">
-						<Texture parentKey="ArrowGlowLEFT" inherits="HelpPlateArrow-GlowDOWN" alphaMode="ADD" alpha="0.5">
-							<Size x="53" y="21"/>
-							<Anchors>
-								<Anchor point="RIGHT" relativePoint="LEFT" x="3" y="0"/>
-							</Anchors>
-						</Texture>
-					</Layer>
-				</Layers>
-				<Scripts>
-					<OnLoad>
-						SetClampedTextureRotation(self.ArrowLEFT, 90);
-						SetClampedTextureRotation(self.ArrowGlowLEFT, 90);
-					</OnLoad>
-				</Scripts>
-				<Frames>
-					<Button parentKey="CloseButton" inherits="UIPanelCloseButton">
-						<Anchors>
-							<Anchor point="TOPRIGHT" x="6" y="6"/>
-						</Anchors>
-						<Scripts>
-							<OnClick>
-								self:GetParent():Hide();
-								SetCVarBitfield("closedInfoFrames", LE_FRAME_TUTORIAL_REAGENT_BANK_UNLOCK, true);
-							</OnClick>
-						</Scripts>
-					</Button>
-				</Frames>
-			</Frame>
-			
 			
 			<EditBox name="BankItemSearchBox" inherits="BagSearchBoxTemplate" letters="15">
 	            <Size x="110" y="20"/>
@@ -222,7 +170,7 @@
 	            </Scripts>
             </Button>
 			<!-- Bank Slots  -->
-			<Frame name="BankSlotsFrame" SetAllPoints="true" useParentLevel="true" hidden="false">
+			<Frame name="BankSlotsFrame" setAllPoints="true" useParentLevel="true" hidden="false">
 				<Layers>
 					<Layer level="BORDER">
 						<Texture parentKey="LeftTopCorner-Shadow" file="Interface\BankFrame\CornersShadow" virtual="true" >
@@ -298,48 +246,48 @@
 					</Layer>
 				</Layers>
 				<Frames>
-					<Button parentKey="Item1" name="BankFrameItem1" inherits="BankItemButtonGenericTemplate" id="1">
+					<ItemButton parentKey="Item1" name="BankFrameItem1" inherits="BankItemButtonGenericTemplate" id="1">
 						<Anchors>
 							<Anchor point="TOPLEFT" x="28" y="-75"/>
 						</Anchors>
-					</Button>
+					</ItemButton>
 					<!-- The other 27 items are created in BankFrame_OnLoad -->
 
-					<Button parentKey="Bag1" inherits="BankItemButtonBagTemplate" id="1">
+					<ItemButton parentKey="Bag1" inherits="BankItemButtonBagTemplate" id="1">
 						<Anchors>
 							<Anchor point="TOPLEFT" relativeKey="$parent.Item1" relativePoint="BOTTOMLEFT" x="0" y="-164"/>
 						</Anchors>
-					</Button>
-					<Button parentKey="Bag2" inherits="BankItemButtonBagTemplate" id="2">
+					</ItemButton>
+					<ItemButton parentKey="Bag2" inherits="BankItemButtonBagTemplate" id="2">
 						<Anchors>
 							<Anchor point="TOPLEFT" relativeKey="$parent.Bag1" relativePoint="TOPRIGHT" x="12" y="0"/>
 						</Anchors>
-					</Button>
-					<Button parentKey="Bag3" inherits="BankItemButtonBagTemplate" id="3">
+					</ItemButton>
+					<ItemButton parentKey="Bag3" inherits="BankItemButtonBagTemplate" id="3">
 						<Anchors>
 							<Anchor point="TOPLEFT" relativeKey="$parent.Bag2" relativePoint="TOPRIGHT" x="12" y="0"/>
 						</Anchors>
-					</Button>
-					<Button parentKey="Bag4" inherits="BankItemButtonBagTemplate" id="4">
+					</ItemButton>
+					<ItemButton parentKey="Bag4" inherits="BankItemButtonBagTemplate" id="4">
 						<Anchors>
 							<Anchor point="TOPLEFT" relativeKey="$parent.Bag3" relativePoint="TOPRIGHT" x="12" y="0"/>
 						</Anchors>
-					</Button>
-					<Button parentKey="Bag5" inherits="BankItemButtonBagTemplate" id="5">
+					</ItemButton>
+					<ItemButton parentKey="Bag5" inherits="BankItemButtonBagTemplate" id="5">
 						<Anchors>
 							<Anchor point="TOPLEFT" relativeKey="$parent.Bag4" relativePoint="TOPRIGHT" x="12" y="0"/>
 						</Anchors>
-					</Button>
-					<Button parentKey="Bag6" inherits="BankItemButtonBagTemplate" id="6">
+					</ItemButton>
+					<ItemButton parentKey="Bag6" inherits="BankItemButtonBagTemplate" id="6">
 						<Anchors>
 							<Anchor point="TOPLEFT" relativeKey="$parent.Bag5" relativePoint="TOPRIGHT" x="12" y="0"/>
 						</Anchors>
-					</Button>
-					<Button parentKey="Bag7" inherits="BankItemButtonBagTemplate" id="7">
+					</ItemButton>
+					<ItemButton parentKey="Bag7" inherits="BankItemButtonBagTemplate" id="7">
 						<Anchors>
 							<Anchor point="TOPLEFT" relativeKey="$parent.Bag6" relativePoint="TOPRIGHT" x="12" y="0"/>
 						</Anchors>
-					</Button>
+					</ItemButton>
 					<Frame name="BankFramePurchaseInfo" hidden="false">
 						<Size x="380" y="78"/>
 						<Anchors>
@@ -369,7 +317,7 @@
 								</Anchors>
 								<Scripts>
 									<OnClick>
-										PlaySound("igMainMenuOption");
+										PlaySound(SOUNDKIT.IG_MAINMENU_OPTION);
 										StaticPopup_Show("CONFIRM_BUY_BANK_SLOT");
 									</OnClick>
 								</Scripts>
@@ -497,7 +445,7 @@
 						</Anchors>
 						<Scripts>
 							<OnClick>
-								PlaySound("igMainMenuOption");
+								PlaySound(SOUNDKIT.IG_MAINMENU_OPTION);
 								DepositReagentBank();
 							</OnClick>
 						</Scripts>
@@ -509,7 +457,7 @@
 							<Anchor point="BOTTOMRIGHT" relativePoint="BOTTOMRIGHT" x="0" y="40"/>
 						</Anchors>
 						<Layers>
-							<Layer level="BACKGROUNDBORDER">
+							<Layer level="BORDER">
 								<Texture name="$parentBottomLeftInner" file="Interface\GuildBankFrame\Corners" >
 									<Size x="32" y="32"/>
 									<Anchors>
@@ -612,7 +560,7 @@
 								</Anchors>
 								<Scripts>
 									<OnClick>
-										PlaySound("igMainMenuOption");
+										PlaySound(SOUNDKIT.IG_MAINMENU_OPTION);
 										StaticPopup_Show("CONFIRM_BUY_REAGENTBANK_TAB");
 									</OnClick>
 								</Scripts>

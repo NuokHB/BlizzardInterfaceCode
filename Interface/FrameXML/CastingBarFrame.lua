@@ -104,12 +104,12 @@ end
 function CastingBarFrame_OnShow(self)
 	if ( self.unit ) then
 		if ( self.casting ) then
-			local _, _, _, _, startTime = UnitCastingInfo(self.unit);
+			local _, _, _, startTime = UnitCastingInfo(self.unit);
 			if ( startTime ) then
 				self.value = (GetTime() - (startTime / 1000));
 			end
 		else
-			local _, _, _, _, _, endTime = UnitChannelInfo(self.unit);
+			local _, _, _, _, endTime = UnitChannelInfo(self.unit);
 			if ( endTime ) then
 				self.value = ((endTime / 1000) - GetTime());
 			end
@@ -147,7 +147,7 @@ function CastingBarFrame_OnEvent(self, event, ...)
 	end
 	
 	if ( event == "UNIT_SPELLCAST_START" ) then
-		local name, nameSubtext, text, texture, startTime, endTime, isTradeSkill, castID, notInterruptible = UnitCastingInfo(unit);
+		local name, text, texture, startTime, endTime, isTradeSkill, castID, notInterruptible = UnitCastingInfo(unit);
 		if ( not name or (not self.showTradeSkills and isTradeSkill)) then
 			self:Hide();
 			return;
@@ -205,7 +205,7 @@ function CastingBarFrame_OnEvent(self, event, ...)
 		if ( not self:IsVisible() ) then
 			self:Hide();
 		end
-		if ( (self.casting and event == "UNIT_SPELLCAST_STOP" and select(4, ...) == self.castID) or
+		if ( (self.casting and event == "UNIT_SPELLCAST_STOP" and select(2, ...) == self.castID) or
 		     (self.channeling and event == "UNIT_SPELLCAST_CHANNEL_STOP") ) then
 			if ( self.Spark ) then
 				self.Spark:Hide();
@@ -229,7 +229,7 @@ function CastingBarFrame_OnEvent(self, event, ...)
 		end
 	elseif ( event == "UNIT_SPELLCAST_FAILED" or event == "UNIT_SPELLCAST_INTERRUPTED" ) then
 		if ( self:IsShown() and
-		     (self.casting and select(4, ...) == self.castID) and not self.fadeOut ) then
+		     (self.casting and select(2, ...) == self.castID) and not self.fadeOut ) then
 			self:SetValue(self.maxValue);
 			self:SetStatusBarColor(self.failedCastColor:GetRGB());
 			if ( self.Spark ) then
@@ -249,7 +249,7 @@ function CastingBarFrame_OnEvent(self, event, ...)
 		end
 	elseif ( event == "UNIT_SPELLCAST_DELAYED" ) then
 		if ( self:IsShown() ) then
-			local name, nameSubtext, text, texture, startTime, endTime, isTradeSkill, castID, notInterruptible = UnitCastingInfo(unit);
+			local name, text, texture, startTime, endTime, isTradeSkill, castID, notInterruptible = UnitCastingInfo(unit);
 			if ( not name or (not self.showTradeSkills and isTradeSkill)) then
 				-- if there is no name, there is no bar
 				self:Hide();
@@ -274,7 +274,7 @@ function CastingBarFrame_OnEvent(self, event, ...)
 			end
 		end
 	elseif ( event == "UNIT_SPELLCAST_CHANNEL_START" ) then
-		local name, nameSubtext, text, texture, startTime, endTime, isTradeSkill, notInterruptible = UnitChannelInfo(unit);
+		local name, text, texture, startTime, endTime, isTradeSkill, notInterruptible, spellID = UnitChannelInfo(unit);
 		if ( not name or (not self.showTradeSkills and isTradeSkill)) then
 			-- if there is no name, there is no bar
 			self:Hide();
@@ -324,7 +324,7 @@ function CastingBarFrame_OnEvent(self, event, ...)
 		end
 	elseif ( event == "UNIT_SPELLCAST_CHANNEL_UPDATE" ) then
 		if ( self:IsShown() ) then
-			local name, nameSubtext, text, texture, startTime, endTime, isTradeSkill = UnitChannelInfo(unit);
+			local name, text, texture, startTime, endTime, isTradeSkill = UnitChannelInfo(unit);
 			if ( not name or (not self.showTradeSkills and isTradeSkill)) then
 				-- if there is no name, there is no bar
 				self:Hide();
@@ -335,19 +335,36 @@ function CastingBarFrame_OnEvent(self, event, ...)
 			self:SetMinMaxValues(0, self.maxValue);
 			self:SetValue(self.value);
 		end
-	elseif ( self.showShield and event == "UNIT_SPELLCAST_INTERRUPTIBLE" ) then
+	elseif ( event == "UNIT_SPELLCAST_INTERRUPTIBLE" or event == "UNIT_SPELLCAST_NOT_INTERRUPTIBLE" ) then
+		CastingBarFrame_UpdateInterruptibleState(self, event == "UNIT_SPELLCAST_NOT_INTERRUPTIBLE");
+	end
+end
+
+function CastingBarFrame_UpdateInterruptibleState(self, notInterruptible)
+	if ( self.casting or self.channeling ) then
+		local startColor = CastingBarFrame_GetEffectiveStartColor(self, self.channeling, notInterruptible);
+		self:SetStatusBarColor(startColor:GetRGB());
+
+		if self.flashColorSameAsStart then
+			self.Flash:SetVertexColor(startColor:GetRGB());
+		end
+
 		if ( self.BorderShield ) then
-			self.BorderShield:Hide();
-			if ( self.BarBorder ) then
-				self.BarBorder:Show();
+			if ( self.showShield and notInterruptible ) then
+				self.BorderShield:Show();
+				if ( self.BarBorder ) then
+					self.BarBorder:Hide();
+				end
+			else
+				self.BorderShield:Hide();
+				if ( self.BarBorder ) then
+					self.BarBorder:Show();
+				end
 			end
 		end
-	elseif ( self.showShield and event == "UNIT_SPELLCAST_NOT_INTERRUPTIBLE" ) then
-		if ( self.BorderShield ) then
-			self.BorderShield:Show();
-			if ( self.BarBorder ) then
-				self.BarBorder:Hide();
-			end
+
+		if ( self.Icon and self.iconWhenNoninterruptible ) then
+			self.Icon:SetShown(not notInterruptible);
 		end
 	end
 end

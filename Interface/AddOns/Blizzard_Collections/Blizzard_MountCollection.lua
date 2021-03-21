@@ -1,11 +1,131 @@
 local MOUNT_BUTTON_HEIGHT = 46;
 local PLAYER_MOUNT_LEVEL = 20;
 local SUMMON_RANDOM_FAVORITE_MOUNT_SPELL = 150544;
+local LOCKED_EQUIPMENT_LABEL_COLOR = CreateColor(0.450, 0.392, 0.341);
+local DESATURATED_EQUIPMENT_LABEL_COLOR = CreateColor(0.502, 0.502, 0.502);
 
 local MOUNT_FACTION_TEXTURES = {
 	[0] = "MountJournalIcons-Horde",
 	[1] = "MountJournalIcons-Alliance"
 };
+
+StaticPopupDialogs["DIALOG_REPLACE_MOUNT_EQUIPMENT"] = {
+	text = DIALOG_INSTRUCTION_REPLACE_MOUNT_EQUIPMENT,
+	button1 = YES,
+	button2 = NO,
+	
+	OnAccept = function()
+		MountJournal_OnDialogApplyEquipmentChoice(MountJournal, true);
+		PlaySound(SOUNDKIT.UI_MOUNT_SLOTEQUIPMENT_APPROVAL);
+	end,
+	OnCancel = function()
+		MountJournal_OnDialogApplyEquipmentChoice(MountJournal, false);
+	end,
+	timeout = 0,
+	showAlert = 1,
+	whileDead = 1,
+	hideOnEscape = 1,
+};
+
+SuppressedMountEquipmentButtonMixin = {};
+function SuppressedMountEquipmentButtonMixin:OnEnter()
+	GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT", self:GetWidth());
+	GameTooltip_AddErrorLine(GameTooltip, MOUNT_EQUIPMENT_EXEMPT, true);
+	GameTooltip:Show();
+end
+
+function SuppressedMountEquipmentButtonMixin:OnLeave()
+	GameTooltip:Hide();
+end
+
+AlertMountEquipmentFeatureMixin = CreateFromMixins(NewFeatureLabelMixin);
+
+function AlertMountEquipmentFeatureMixin:ClearAlert()
+	NewFeatureLabelMixin.ClearAlert(self);
+	SetCVarBitfield("closedInfoFrames", LE_FRAME_TUTORIAL_MOUNT_EQUIPMENT_SLOT_FRAME, true);
+	CollectionsMicroButton_SetAlertShown(false);
+end
+
+function AlertMountEquipmentFeatureMixin:ValidateIsShown()
+	self:SetShown(not GetCVarBitfield("closedInfoFrames", LE_FRAME_TUTORIAL_MOUNT_EQUIPMENT_SLOT_FRAME));
+end
+
+MountEquipmentButtonMixin = {};
+function MountEquipmentButtonMixin:Initialize(item)
+	self.ItemIcon:SetTexture(item and item:GetItemIcon() or nil);
+	self.ItemBorder:SetShown(item ~= nil);
+end
+
+function MountEquipmentButtonMixin:OnReceiveDrag()
+	self:ApplyEquipmentAtCursor();
+end
+
+function MountEquipmentButtonMixin:OnClick()
+	if not IsModifiedClick() then
+		self:ApplyEquipmentAtCursor();
+	else
+		if IsModifiedClick("CHATLINK") then
+			local itemID = C_MountJournal.GetAppliedMountEquipmentID();
+			local item = itemID and Item:CreateFromItemID(itemID);
+			if item then
+				item:ContinueOnItemLoad(function()
+					ChatEdit_InsertLink(item:GetItemLink())
+				end);
+			end
+		end
+	end
+end
+
+function MountJournal_CanApplyMountEquipment(itemLocation)
+	if itemLocation and itemLocation:IsValid() then
+		if C_MountJournal.IsItemMountEquipment(itemLocation) then
+			local item = Item:CreateFromItemLocation(itemLocation);
+			local itemID = item and item:GetItemID();
+			return itemID and itemID ~= C_MountJournal.GetAppliedMountEquipmentID();
+		end
+	end
+	return false;
+end
+
+function MountEquipmentButtonMixin:ApplyEquipmentAtCursor()
+	if self:IsEnabled() and MountJournal_ApplyEquipment(MountJournal, C_Cursor.GetCursorItem()) then
+		ClearCursor();
+	end
+end
+
+function MountJournal_ApplyEquipmentFromContainerClick(self, itemLocation)
+	if MountJournal_ApplyEquipment(self, itemLocation) then
+		self.SlotButton:ClearAlert();
+	end
+end
+
+function MountEquipmentButtonMixin:SetPendingApply(isPending)
+	if isPending then
+		self:SetButtonState("NORMAL");
+		self:SetDragTargetAnimationPlaying(false);
+	end
+	self:SetEnabled(not isPending);
+	self.SlotBorder:SetShown(not isPending);
+	self.SlotBorderOpen:SetShown(isPending);
+end
+
+function MountEquipmentButtonMixin:SetDragTargetAnimationPlaying(playing)
+	self.NotifyDragTargetAnim:SetPlaying(playing and self:IsEnabled());
+end
+
+function MountEquipmentButtonMixin:OnEnter()
+	self:ClearAlert();
+	
+	MountJournal_InitializeEquipmentTooltip(MountJournal);
+end
+
+function MountEquipmentButtonMixin:ClearAlert()
+	self.NewAlert:ClearAlert();
+end
+
+function MountEquipmentButtonMixin:OnLeave()
+	GameTooltip:Hide();
+end
 
 function MountJournal_OnLoad(self)
 	self:RegisterEvent("COMPANION_LEARNED");
@@ -13,40 +133,254 @@ function MountJournal_OnLoad(self)
 	self:RegisterEvent("COMPANION_UPDATE");
 	self:RegisterEvent("MOUNT_JOURNAL_USABILITY_CHANGED");
 	self:RegisterEvent("MOUNT_JOURNAL_SEARCH_UPDATED");
+	self:RegisterEvent("UI_MODEL_SCENE_INFO_UPDATED");
+	self:RegisterEvent("PLAYER_LEVEL_UP");
+	self:RegisterEvent("PLAYER_MOUNT_DISPLAY_CHANGED")
+	self:RegisterEvent("MOUNT_EQUIPMENT_APPLY_RESULT");
+	self:RegisterEvent("CURSOR_UPDATE");
+
 	self.ListScrollFrame.update = MountJournal_UpdateMountList;
 	self.ListScrollFrame.scrollBar.doNotHide = true;
 	HybridScrollFrame_CreateButtons(self.ListScrollFrame, "MountListButtonTemplate", 44, 0);
 	UIDropDownMenu_Initialize(self.mountOptionsMenu, MountOptionsMenu_Init, "MENU");
+
+	local bottomLeftInset = self.BottomLeftInset;
+	self.BackgroundOverlay = bottomLeftInset.BackgroundOverlay;
+	self.SlotLabel = bottomLeftInset.SlotLabel;
+	self.SlotButton = bottomLeftInset.SlotButton;
+	
+	local unlockLevel = C_MountJournal.GetMountEquipmentUnlockLevel();
+	local levelRequiredText = MOUNT_EQUIPMENT_UNLOCK_REQUIREMENT:format(unlockLevel); 
+	self.SlotRequirementLabel = bottomLeftInset.SlotRequirementLabel;
+	self.SlotRequirementLabel:SetText(levelRequiredText);
+	self.SlotRequirementLabel:SetTextColor(LOCKED_EQUIPMENT_LABEL_COLOR:GetRGB());
+	
+	self.SuppressedMountEquipmentButton = bottomLeftInset.SuppressedMountEquipmentButton;
+	
+	MountJournal_UpdateEquipment(self);
 end
 
 function MountJournal_OnEvent(self, event, ...)
 	if ( event == "MOUNT_JOURNAL_USABILITY_CHANGED" or event == "COMPANION_LEARNED" or event == "COMPANION_UNLEARNED" or event == "COMPANION_UPDATE" ) then
 		local companionType = ...;
 		if ( not companionType or companionType == "MOUNT" ) then
-			if (self:IsVisible()) then
-				MountJournal_UpdateMountList();
-				MountJournal_UpdateMountDisplay();
-			end
+			MountJournal_FullUpdate(self);
 		end
 	elseif ( event == "MOUNT_JOURNAL_SEARCH_UPDATED" ) then
+		MountJournal_FullUpdate(self);
+	elseif ( event == "UI_MODEL_SCENE_INFO_UPDATED" ) then
 		if (self:IsVisible()) then
-			MountJournal_UpdateMountList();
-			MountJournal_UpdateMountDisplay();
+			MountJournal_UpdateMountDisplay(true);
 		end
+	elseif ( event == "PLAYER_LEVEL_UP" ) then
+		MountJournal_UpdateEquipment(self);
+	elseif ( event == "CURSOR_UPDATE" ) then
+		MountJournal_ValidateCursorDragSourceCompatible(self);
+	elseif ( event == "MOUNT_EQUIPMENT_APPLY_RESULT" ) then
+		local success = ...;
+		MountJournal_OnEquipmentApplyResult(self, success);
+	elseif (event == "PLAYER_MOUNT_DISPLAY_CHANGED" ) then
+		MountJournal_UpdateEquipmentPalette(self);
+	end
+end
+
+function MountJournal_ApplyEquipment(self, itemLocation)
+	if not MountJournal_CanApplyMountEquipment(itemLocation) then
+		return false;
+	end
+
+	local pendingItem = Item:CreateFromItemLocation(itemLocation);
+	local canContinue = true;
+	if C_MountJournal.IsMountEquipmentApplied() then
+		local dialog = StaticPopup_Show("DIALOG_REPLACE_MOUNT_EQUIPMENT");
+		if not dialog then
+			return false;
+		end
+		MountJournal_SetPendingApply(self, pendingItem);
+	else
+		MountJournal_SetPendingApply(self, pendingItem);
+
+		canContinue = C_MountJournal.ApplyMountEquipment(itemLocation);
+	end
+
+	if canContinue then
+		pendingItem:ContinueWithCancelOnItemLoad(function()
+			MountJournal_InitializeEquipmentSlot(self, pendingItem);
+		end);
+
+		PlaySound(SOUNDKIT.UI_MOUNT_SLOTEQUIPMENT);
+	else
+		MountJournal_ClearPendingAndUpdate(self);
+	end
+
+	return canContinue;
+end
+
+function MountJournal_UpdateEquipmentPalette(self)
+	local effectsSuppressed = C_MountJournal.AreMountEquipmentEffectsSuppressed();
+	local locked = not C_PlayerInfo.CanPlayerUseMountEquipment();
+	if locked or effectsSuppressed then
+		local desaturation = 1.0;
+		self.BottomLeftInset:DesaturateHierarchy(desaturation);
+		self.SlotLabel:SetTextColor(DESATURATED_EQUIPMENT_LABEL_COLOR:GetRGB());
+	else
+		local desaturation = 0.0;
+		self.BottomLeftInset:DesaturateHierarchy(desaturation);
+
+		local displayedItem = MountJournal_GetDisplayedMountEquipmentItem(self);
+		if displayedItem then
+			displayedItem:ContinueWithCancelOnItemLoad(function()
+				local colorObject = displayedItem:GetItemQualityColor();
+				local color = colorObject and colorObject.color;
+				if color then
+					self.SlotLabel:SetTextColor(color:GetRGB());
+				end
+			end);
+		else
+			self.SlotLabel:SetTextColor(GameFontNormal:GetTextColor());
+		end
+	end
+
+	self.SuppressedMountEquipmentButton:SetShown(effectsSuppressed);
+end
+
+function MountJournal_GetDisplayedMountEquipmentItem(self)
+	return self.pendingItem or self.currentItem;
+end
+
+function MountJournal_HasPendingMountEquipment(self)
+	return self.pendingItem ~= nil;
+end
+
+function MountJournal_SetPendingApply(self, item)
+	if item then
+		item:LockItem();
+		
+		self.pendingItem = item;
+		self.SlotButton:SetPendingApply(true);
+	end
+end
+
+function MountJournal_ClearPendingApply(self)
+	local pendingItem = self.pendingItem;
+	self.pendingItem = nil;
+
+	if pendingItem then
+		pendingItem:UnlockItem();
+		
+		self.SlotButton:SetPendingApply(false);
+	end
+end
+
+function MountJournal_ClearPendingAndUpdate(self)
+	MountJournal_ClearPendingApply(self);
+	MountJournal_UpdateEquipment(self);
+end
+
+function MountJournal_OnDialogApplyEquipmentChoice(self, isAccepted)
+	local canContinue = false;
+	if isAccepted then
+		local pendingItem = self.pendingItem;
+		canContinue = C_MountJournal.ApplyMountEquipment(pendingItem:GetItemLocation());
+	end
+
+	if not canContinue then
+		MountJournal_ClearPendingAndUpdate(self);
+	end
+end
+
+function MountJournal_OnEquipmentApplyResult(self, success)
+	MountJournal_ClearPendingAndUpdate(self);
+end
+
+function MountJournal_InitializeEquipmentTooltip(self)
+	GameTooltip:Hide();
+	GameTooltip:SetOwner(self.SlotButton, "ANCHOR_RIGHT");
+
+	local item = MountJournal_GetDisplayedMountEquipmentItem(self);
+	local itemID = item and item:GetItemID();
+	if itemID then
+		GameTooltip:SetItemByID(itemID);
+		GameTooltip:Show();
+	end
+end
+
+function MountJournal_ValidateCursorDragSourceCompatible(self)
+	local itemLocation = C_Cursor.GetCursorItem();
+	local canApply = MountJournal_CanApplyMountEquipment(itemLocation);
+	self.SlotButton:SetDragTargetAnimationPlaying(canApply);
+end
+
+function MountJournal_InitializeEquipmentSlot(self, item)	
+	self.SlotButton:Initialize(item);
+
+	if item then
+		local itemName = item:GetItemName();
+		self.SlotLabel:SetText(itemName);
+
+		-- Replace the existing tooltip if necessary.
+		if GameTooltip:IsShown() and GameTooltip:GetOwner() == self.SlotButton then
+			MountJournal_InitializeEquipmentTooltip(self);
+		end	
+	else
+		self.SlotLabel:SetText(MOUNT_EQUIPMENT_NOTICE);
+	end
+
+	MountJournal_UpdateEquipmentPalette(self);
+end
+
+function MountJournal_UpdateEquipment(self)
+	local isUnlocked = C_PlayerInfo.CanPlayerUseMountEquipment();
+	self.SlotButton:SetShown(isUnlocked);
+	self.SlotLabel:SetShown(isUnlocked);
+	self.SlotRequirementLabel:SetShown(not isUnlocked);
+	self.BackgroundOverlay:SetShown(not isUnlocked);
+
+	local itemID = C_MountJournal.GetAppliedMountEquipmentID();
+	self.currentItem = itemID and Item:CreateFromItemID(itemID);
+
+	if isUnlocked then
+		-- A pending item has precedence over the current item.
+		local displayedItem = MountJournal_GetDisplayedMountEquipmentItem(self);
+		if displayedItem then
+			displayedItem:ContinueWithCancelOnItemLoad(function()
+				MountJournal_InitializeEquipmentSlot(self, displayedItem);
+			end);
+		else
+			local noItem = nil;
+			MountJournal_InitializeEquipmentSlot(self, noItem);
+		end
+	end
+
+	MountJournal_UpdateEquipmentPalette(self);
+end
+
+function MountJournal_FullUpdate(self)
+	if (self:IsVisible()) then
+		MountJournal_UpdateMountList();
+
+		if (not MountJournal.selectedSpellID) then
+			MountJournal_Select(1);
+		end
+
+		MountJournal_UpdateMountDisplay();
 	end
 end
 
 function MountJournal_OnShow(self)
-	MountJournal_UpdateMountList();
-	if (not MountJournal.selectedSpellID) then
-		MountJournal_Select(1);
-	end
-	MountJournal_UpdateMountDisplay();
-	SetPortraitToTexture(CollectionsJournalPortrait, "Interface\\Icons\\MountJournalPortrait");
+	MountJournal_FullUpdate(self);
+	MountJournal_UpdateEquipment(self);
+	CollectionsJournal:SetPortraitToAsset("Interface\\Icons\\MountJournalPortrait");
+
+	local hasPendingItem = MountJournal_HasPendingMountEquipment(self);
+	self.SlotButton:SetPendingApply(hasPendingItem);
+	self.SlotButton.NewAlert:ValidateIsShown();
+	EventRegistry:TriggerEvent("MountJournal.OnShow");
 end
 
 function MountJournal_OnHide(self)
 	C_MountJournal.ClearRecentFanfares();
+	EventRegistry:TriggerEvent("MountJournal.OnHide");
 end
 
 function MountJournal_UpdateMountList()
@@ -80,15 +414,16 @@ function MountJournal_UpdateMountList()
 		if ( displayIndex <= numDisplayedMounts and showMounts ) then
 			local index = displayIndex;
 			local creatureName, spellID, icon, active, isUsable, sourceType, isFavorite, isFactionSpecific, faction, isFiltered, isCollected, mountID = C_MountJournal.GetDisplayedMountInfo(index);
-			local needsFanFare = C_MountJournal.NeedsFanfare(mountID);
+			local needsFanfare = C_MountJournal.NeedsFanfare(mountID);
 
 			button.name:SetText(creatureName);
-			button.icon:SetTexture(needsFanFare and COLLECTIONS_FANFARE_ICON or icon);
-			button.new:SetShown(needsFanFare);
-			button.newGlow:SetShown(needsFanFare);
+			button.icon:SetTexture(needsFanfare and COLLECTIONS_FANFARE_ICON or icon);
+			button.new:SetShown(needsFanfare);
+			button.newGlow:SetShown(needsFanfare);
 
 			button.index = index;
 			button.spellID = spellID;
+			button.mountID = mountID;
 
 			button.active = active;
 			if (active) then
@@ -106,10 +441,10 @@ function MountJournal_UpdateMountList()
 				button.selectedTexture:Hide();
 			end
 			button:SetEnabled(true);
-			button.unusable:Hide();
+			CollectionItemListButton_SetRedOverlayShown(button, false);
 			button.iconBorder:Hide();
 			button.background:SetVertexColor(1, 1, 1, 1);
-			if (isUsable or needsFanFare) then
+			if (isUsable or needsFanfare) then
 				button.DragButton:SetEnabled(true);
 				button.additionalText = nil;
 				button.icon:SetDesaturated(false);
@@ -117,7 +452,7 @@ function MountJournal_UpdateMountList()
 				button.name:SetFontObject("GameFontNormal");
 			else
 				if (isCollected) then
-					button.unusable:Show();
+					CollectionItemListButton_SetRedOverlayShown(button, true);
 					button.DragButton:SetEnabled(true);
 					button.name:SetFontObject("GameFontNormal");
 					button.icon:SetAlpha(0.75);
@@ -154,7 +489,7 @@ function MountJournal_UpdateMountList()
 			button.index = nil;
 			button.spellID = 0;
 			button.selected = false;
-			button.unusable:Hide();
+			CollectionItemListButton_SetRedOverlayShown(button, false);
 			button.DragButton.ActiveTexture:Hide();
 			button.selectedTexture:Hide();
 			button:SetEnabled(false);
@@ -183,16 +518,32 @@ function MountJournalMountButton_UpdateTooltip(self)
 	GameTooltip:SetMountBySpellID(self.spellID);
 end
 
-function MountJournal_UpdateMountDisplay()
+function MountJournalMountButton_ChooseFallbackMountToDisplay(mountID, random)
+	local allCreatureDisplays = C_MountJournal.GetMountAllCreatureDisplayInfoByID(mountID);
+	if allCreatureDisplays and #allCreatureDisplays > 0 then
+		if random then
+			return allCreatureDisplays[math.random(1, #allCreatureDisplays)].creatureDisplayID;
+		else
+			return allCreatureDisplays[1].creatureDisplayID;
+		end
+	end
+	return 0;
+end
+
+function MountJournal_UpdateMountDisplay(forceSceneChange)
 	if ( MountJournal.selectedMountID ) then
 		local creatureName, spellID, icon, active, isUsable, sourceType = C_MountJournal.GetMountInfoByID(MountJournal.selectedMountID);
-		if ( MountJournal.MountDisplay.lastDisplayed ~= spellID ) then
-			local creatureDisplayID, descriptionText, sourceText, isSelfMount = C_MountJournal.GetMountInfoExtraByID(MountJournal.selectedMountID);
-			local needsFanFare = C_MountJournal.NeedsFanfare(MountJournal.selectedMountID);
+		local needsFanfare = C_MountJournal.NeedsFanfare(MountJournal.selectedMountID);
+		if ( MountJournal.MountDisplay.lastDisplayed ~= spellID or forceSceneChange ) then
+			local creatureDisplayID, descriptionText, sourceText, isSelfMount, _, modelSceneID, animID, spellVisualKitID, disablePlayerMountPreview = C_MountJournal.GetMountInfoExtraByID(MountJournal.selectedMountID);
+			if not creatureDisplayID then
+				local randomSelection = false;
+				creatureDisplayID = MountJournalMountButton_ChooseFallbackMountToDisplay(MountJournal.selectedMountID, randomSelection);
+			end
 
 			MountJournal.MountDisplay.InfoButton.Name:SetText(creatureName);
 
-			if needsFanFare then
+			if needsFanfare then
 				MountJournal.MountDisplay.InfoButton.New:Show();
 				MountJournal.MountDisplay.InfoButton.NewGlow:Show();
 
@@ -212,42 +563,37 @@ function MountJournal_UpdateMountDisplay()
 
 			MountJournal.MountDisplay.lastDisplayed = spellID;
 
-			if creatureDisplayID == 0 then
-				local raceID = UnitRace("player");
-				local gender = UnitSex("player");
-				MountJournal.MountDisplay.ModelFrame:SetCustomRace(raceID, gender);
-			else
-				MountJournal.MountDisplay.ModelFrame:SetDisplayInfo(creatureDisplayID);
-			end
+			MountJournal.MountDisplay.ModelScene:TransitionToModelSceneID(modelSceneID, CAMERA_TRANSITION_TYPE_IMMEDIATE, CAMERA_MODIFICATION_TYPE_MAINTAIN, forceSceneChange);
 
-			-- mount self idle animation
-			if (isSelfMount) then
-				MountJournal.MountDisplay.ModelFrame:SetDoBlend(false);
-				MountJournal.MountDisplay.ModelFrame:SetAnimation(618, -1); -- MountSelfIdle
-			end
+			MountJournal.MountDisplay.ModelScene:PrepareForFanfare(needsFanfare);
 
-			if needsFanFare then
-				MountJournal.MountDisplay.WrappedModelFrame:Show();
-				if not MountJournal.MountDisplay.UnwrapAnim:IsPlaying() then
-					MountJournal.MountDisplay.ModelFrame:SetAlpha(0);
-					MountJournal.MountDisplay.WrappedModelFrame:SetAnimation(0);
-					MountJournal.MountDisplay.WrappedModelFrame:SetAlpha(1);
+			local mountActor = MountJournal.MountDisplay.ModelScene:GetActorByTag("unwrapped");
+			if mountActor then
+				mountActor:SetModelByCreatureDisplayID(creatureDisplayID);
+
+				-- mount self idle animation
+				if (isSelfMount) then
+					mountActor:SetAnimationBlendOperation(LE_MODEL_BLEND_OPERATION_NONE);
+					mountActor:SetAnimation(618); -- MountSelfIdle
+				else
+					mountActor:SetAnimationBlendOperation(LE_MODEL_BLEND_OPERATION_ANIM);
+					mountActor:SetAnimation(0);
 				end
-			else
-				MountJournal.MountDisplay.WrappedModelFrame:Hide();
-				if not MountJournal.MountDisplay.UnwrapAnim:IsPlaying() then
-					MountJournal.MountDisplay.ModelFrame:SetAlpha(1);
+				local showPlayer = GetCVarBool("mountJournalShowPlayer");
+				if not disablePlayerMountPreview and not showPlayer then
+					disablePlayerMountPreview = true;
 				end
+				MountJournal.MountDisplay.ModelScene:AttachPlayerToMount(mountActor, animID, isSelfMount, disablePlayerMountPreview, spellVisualKitID);
 			end
 		end
 
-		MountJournal.MountDisplay.ModelFrame:Show();
+		MountJournal.MountDisplay.ModelScene:Show();
 		MountJournal.MountDisplay.YesMountsTex:Show();
 		MountJournal.MountDisplay.InfoButton:Show();
 		MountJournal.MountDisplay.NoMountsTex:Hide();
 		MountJournal.MountDisplay.NoMounts:Hide();
 
-		if (C_MountJournal.NeedsFanfare(MountJournal.selectedMountID) ) then
+		if ( needsFanfare ) then
 			MountJournal.MountButton:SetText(UNWRAP)
 			MountJournal.MountButton:Enable();
 		elseif ( active ) then
@@ -259,7 +605,7 @@ function MountJournal_UpdateMountDisplay()
 		end
 	else
 		MountJournal.MountDisplay.InfoButton:Hide();
-		MountJournal.MountDisplay.ModelFrame:Hide();
+		MountJournal.MountDisplay.ModelScene:Hide();
 		MountJournal.MountDisplay.YesMountsTex:Hide();
 		MountJournal.MountDisplay.NoMountsTex:Show();
 		MountJournal.MountDisplay.NoMounts:Show();
@@ -269,23 +615,53 @@ end
 
 function MountJournal_Select(index)
 	local creatureName, spellID, icon, active, _, _, _, _, _, _, _, mountID = C_MountJournal.GetDisplayedMountInfo(index);
-	MountJournal.selectedSpellID = spellID;
-	MountJournal.selectedMountID = mountID;
+	MountJournal_SetSelected(mountID, spellID);
+end
+
+function MountJournal_SelectByMountID(mountID)
+	local creatureName, spellID, icon, active = C_MountJournal.GetMountInfoByID(mountID);
+	MountJournal_SetSelected(mountID, spellID);
+end
+
+function MountJournal_GetMountButtonHeight()
+	return MOUNT_BUTTON_HEIGHT;
+end
+
+function MountJournal_GetMountButtonByMountID(mountID)
+	local scrollFrame = MountJournal.ListScrollFrame;
+	local buttons = scrollFrame.buttons;
+
+	for i=1, #buttons do
+		local button = buttons[i];
+		if ( button.mountID == mountID ) then
+			return button;
+		end
+	end
+end
+
+local function GetMountDisplayIndexByMountID(mountID)
+	for i = 1, C_MountJournal.GetNumDisplayedMounts() do
+		local creatureName, spellID, icon, active, _, _, _, _, _, _, _, currentMountID = C_MountJournal.GetDisplayedMountInfo(i);
+		if currentMountID == mountID then
+			return i;
+		end
+	end
+	return nil;
+end
+
+function MountJournal_SetSelected(selectedMountID, selectedSpellID)
+	MountJournal.selectedSpellID = selectedSpellID;
+	MountJournal.selectedMountID = selectedMountID;
 	MountJournal_HideMountDropdown();
 	MountJournal_UpdateMountList();
 	MountJournal_UpdateMountDisplay();
-end
-
-function MountJournal_CollectAvailableFilters()
-	MountJournal.baseFilterTypes = {};
-	local numSources = C_PetJournal.GetNumPetSources();
-
-	for i = 1, numSources do
-		MountJournal.baseFilterTypes[i] = false
-	end
-	for i = 1, C_MountJournal.GetNumDisplayedMounts() do
-		local sourceType = select(6,C_MountJournal.GetDisplayedMountInfo(i))
-		MountJournal.baseFilterTypes[sourceType] = true;
+	
+	local inView = MountJournal_GetMountButtonByMountID(selectedMountID) ~= nil;
+	if not inView then
+		local mountIndex = GetMountDisplayIndexByMountID(selectedMountID);
+		if mountIndex then
+			HybridScrollFrame_ScrollToIndex(MountJournal.ListScrollFrame, mountIndex, MountJournal_GetMountButtonHeight);
+		end
 	end
 end
 
@@ -294,22 +670,14 @@ function MountJournalMountButton_UseMount(mountID)
 	if ( active ) then
 		C_MountJournal.Dismiss();
 	elseif ( C_MountJournal.NeedsFanfare(mountID) ) then
-		if MountJournal.MountDisplay.UnwrapAnim:IsPlaying() then
-			return;
-		end
-
-		MountJournal.MountDisplay.WrappedModelFrame:SetAnimation(148);
-		MountJournal.MountDisplay.UnwrapAnim:Play();
-		PlaySound("UI_Store_Unwrap");
-		C_Timer.After(.8, function()
-			MountJournal.MountDisplay.ModelFrame:ApplySpellVisualKit(73393, true);
-		end)
-		C_Timer.After(1.6, function()
+		local function OnFinishedCallback()
 			C_MountJournal.ClearFanfare(mountID);
 			MountJournal_HideMountDropdown();
 			MountJournal_UpdateMountList();
 			MountJournal_UpdateMountDisplay();
-		end)
+		end
+
+		MountJournal.MountDisplay.ModelScene:StartUnwrapAnimation(OnFinishedCallback);
 	else
 		C_MountJournal.SummonByID(mountID);
 	end
@@ -319,6 +687,28 @@ function MountJournalMountButton_OnClick(self)
 	if MountJournal.selectedMountID then
 		MountJournalMountButton_UseMount(MountJournal.selectedMountID);
 	end
+end
+
+function MountJournalMountButton_OnEnter(self)
+	GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
+	GameTooltip:SetText(self:GetText(), HIGHLIGHT_FONT_COLOR:GetRGB());
+
+	local needsFanFare = MountJournal.selectedMountID and C_MountJournal.NeedsFanfare(MountJournal.selectedMountID);
+	if needsFanFare then
+		GameTooltip_AddNormalLine(GameTooltip, MOUNT_UNWRAP_TOOLTIP, true);
+	else
+		GameTooltip_AddNormalLine(GameTooltip, MOUNT_SUMMON_TOOLTIP, true);
+	end
+
+	if MountJournal.selectedMountID ~= nil then
+		local checkIndoors = true;
+		local isUsable, errorText = C_MountJournal.GetMountUsabilityByID(MountJournal.selectedMountID, checkIndoors);
+		if errorText ~= nil then
+			GameTooltip_AddErrorLine(GameTooltip, errorText, true);
+		end
+	end
+
+	GameTooltip:Show();
 end
 
 function MountListDragButton_OnClick(self, button)
@@ -334,7 +724,7 @@ function MountListDragButton_OnClick(self, button)
 			local spellName = GetSpellInfo(id);
 			ChatEdit_InsertLink(spellName);
 		else
-			local spellLink = GetSpellLink(id)
+			local spellLink = GetSpellLink(id);
 			ChatEdit_InsertLink(spellLink);
 		end
 	else
@@ -354,7 +744,7 @@ function MountListItem_OnClick(self, button)
 			local spellName = GetSpellInfo(id);
 			ChatEdit_InsertLink(spellName);
 		else
-			local spellLink = GetSpellLink(id)
+			local spellLink = GetSpellLink(id);
 			ChatEdit_InsertLink(spellLink);
 		end
 	elseif ( self.spellID ~= MountJournal.selectedSpellID ) then
@@ -396,6 +786,14 @@ function MountJournalFilterDropDown_Initialize(self, level)
 		info.isNotRadio = true;
 		UIDropDownMenu_AddButton(info, level)
 
+		info.text = MOUNT_JOURNAL_FILTER_UNUSABLE
+		info.func = function(_, _, _, value)
+						C_MountJournal.SetCollectedFilterSetting(LE_MOUNT_JOURNAL_FILTER_UNUSABLE, value);
+					end
+		info.checked = C_MountJournal.GetCollectedFilterSetting(LE_MOUNT_JOURNAL_FILTER_UNUSABLE);
+		info.isNotRadio = true;
+		UIDropDownMenu_AddButton(info, level)
+
 		info.checked = 	nil;
 		info.isNotRadio = nil;
 		info.func =  nil;
@@ -425,10 +823,9 @@ function MountJournalFilterDropDown_Initialize(self, level)
 		UIDropDownMenu_AddButton(info, level)
 
 		info.notCheckable = false;
-		MountJournal_CollectAvailableFilters();
 		local numSources = C_PetJournal.GetNumPetSources();
 		for i=1,numSources do
-			if ( MountJournal.baseFilterTypes[i] ) then
+			if C_MountJournal.IsValidSourceFilter(i) then
 				info.text = _G["BATTLE_PET_SOURCE_"..i];
 				info.func = function(_, _, _, value)
 								C_MountJournal.SetSourceFilter(i,value);
@@ -442,7 +839,7 @@ end
 
 function MountJournalSummonRandomFavoriteButton_OnLoad(self)
 	self.spellID = SUMMON_RANDOM_FAVORITE_MOUNT_SPELL;
-	local spellName, spellSubname, spellIcon = GetSpellInfo(self.spellID);
+	local spellName, _, spellIcon = GetSpellInfo(self.spellID);
 	self.texture:SetTexture(spellIcon);
 	-- Use the global string instead of the spellName from the db here so that we can have custom newlines in the string
 	self.spellname:SetText(MOUNT_JOURNAL_SUMMON_RANDOM_FAVORITE_MOUNT);
@@ -470,6 +867,7 @@ function MountOptionsMenu_Init(self, level)
 	local info = UIDropDownMenu_CreateInfo();
 	info.notCheckable = true;
 
+	local active = select(4, C_MountJournal.GetMountInfoByID(MountJournal.menuMountID));
 	local needsFanfare = C_MountJournal.NeedsFanfare(MountJournal.menuMountID);
 
 	if (needsFanfare) then
@@ -537,6 +935,7 @@ function MountJournal_ShowMountDropdown(index, anchorTo, offsetX, offsetY)
 		return;
 	end
 	ToggleDropDownMenu(1, nil, MountJournal.mountOptionsMenu, anchorTo, offsetX, offsetY);
+	PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON);
 end
 
 function MountJournal_HideMountDropdown()
@@ -544,3 +943,21 @@ function MountJournal_HideMountDropdown()
 		HideDropDownMenu(1);
 	end
 end
+
+
+PlayerPreviewToggle = {}
+function PlayerPreviewToggle:OnShow()
+	local showPlayer = GetCVarBool("mountJournalShowPlayer");	
+	self:SetChecked(showPlayer);
+end
+
+function PlayerPreviewToggle:OnClick()
+	if self:GetChecked() then
+		SetCVar("mountJournalShowPlayer", 1);
+	else
+		SetCVar("mountJournalShowPlayer", 0);
+	end
+	MountJournal_UpdateMountDisplay(true);
+end
+
+

@@ -23,26 +23,31 @@ local HIDE_MOST = {
 	MultiBarRight		= "hidden",
 	FocusFrame			= "hidden",
 	TemporaryEnchantFrame = "hidden",
-	WorldStateAlwaysUpFrame = "hidden",
-	ZoneAbilityFrame	= "hidden",
+	ExtraAbilityContainer	= "hidden",
 	OrderHallCommandBar	= "hidden",
+	TalentMicroButtonAlert	="hidden",
+	PVPMatchScoreboard = "hidden",
+	PVPMatchResults = "hidden",
+	UIWidgetTopCenterContainerFrame = "hidden",
 }
 
 --------Data on what locks exist and what frames are ruled by them--------
 FRAMELOCK_STATES = {
-	PETBATTLEOPENING = {
-		GeneralDockManager	= "hidden",
-		FriendsMicroButton	= "hidden",
-		ChatFrameMenuButton	= "hidden",
-		CombatLogQuickButtonFrame = "hidden",
-		ChatFrame1			= "hidden",
+	COMMENTATOR_SPECTATING_MODE = Mixin({
+		GeneralDockManager					= "hidden",
+		QuickJoinToastButton				= "hidden",
+		ChatFrameMenuButton					= "hidden",
+		CombatLogQuickButtonFrame 			= "hidden",
+		ArenaEnemyFrames 					= "hidden",
+		ChatFrame1							= "hidden",
+		ChatFrameChannelButton				= "hidden",
 		--Additional chat frames are added to this list as they are created.
-	},
+	}, HIDE_MOST),
 	PETBATTLES = HIDE_MOST,
 };
 
 FRAMELOCK_STATE_PRIORITIES = {
-	"PETBATTLEOPENING",
+	"COMMENTATOR_SPECTATING_MODE",
 	"PETBATTLES",
 };
 
@@ -155,6 +160,10 @@ end
 
 function RemoveFrameLock(lock)
 	setFrameLock(lock, false);
+end
+
+function SetFrameLock(lock, enabled)
+	setFrameLock(lock, enabled);
 end
 
 function UpdateFrameLock(frame)

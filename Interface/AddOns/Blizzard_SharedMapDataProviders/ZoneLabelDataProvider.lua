@@ -4,9 +4,9 @@ function ZoneLabelDataProviderMixin:OnAdded(mapCanvas)
 	MapCanvasDataProviderMixin.OnAdded(self, mapCanvas);
 
 	if self.ZoneLabel then
-		self.ZoneLabel:SetParent(mapCanvas);
+		self.ZoneLabel:SetParent(self:GetMap());
 	else
-		self.ZoneLabel = CreateFrame("FRAME", nil, mapCanvas, "ZoneLabelDataProvider_ZoneLabelTemplate");
+		self.ZoneLabel = CreateFrame("FRAME", nil, self:GetMap(), "ZoneLabelDataProvider_ZoneLabelTemplate");
 		self.ZoneLabel.dataProvider = self;
 	end
 
@@ -33,12 +33,11 @@ function ZoneLabelDataProviderMixin:RefreshAllData(fromOnShow)
 	self.numActiveAreas = 0;
 	self.activeAreas = {};
 
-	local mapAreaID = self:GetMap():GetMapID();
-	for zoneIndex = 1, C_MapCanvas.GetNumZones(mapAreaID) do
-		local zoneMapID, zoneName, zoneDepth, left, right, top, bottom = C_MapCanvas.GetZoneInfo(mapAreaID, zoneIndex);
-		if zoneDepth <= 1 then -- Exclude subzones
-			self:AddZone(zoneMapID, zoneName, left, right, top, bottom);
-		end
+	local mapID = self:GetMap():GetMapID();
+	local mapChildren = C_Map.GetMapChildrenInfo(mapID, Enum.UIMapType.Zone);
+	for i, childMapInfo in ipairs(mapChildren) do
+		local left, right, top, bottom = C_Map.GetMapRectOnMap(childMapInfo.mapID, mapID);
+		self:AddZone(childMapInfo.mapID, childMapInfo.name, left, right, top, bottom);
 	end
 
 	self:AddContinent();
@@ -65,12 +64,6 @@ function ZoneLabelDataProviderMixin:MarkActiveAreasDirty()
 	end
 end
 
-local function GetDistSq(x1, y1, x2, y2)
-	local deltaX = x1 - x2;
-	local deltaY = y1 - y2;
-	return deltaX * deltaX + deltaY * deltaY;
-end
-
 function ZoneLabelDataProviderMixin:EvaluateBestAreaTrigger()
 	self.labelDirty = false;
 
@@ -79,7 +72,7 @@ function ZoneLabelDataProviderMixin:EvaluateBestAreaTrigger()
 	local newBestAreaTrigger;
 	local bestDistSq = math.huge;
 	for areaTrigger in pairs(self.activeAreas) do
-		local distSq = GetDistSq(mapViewRectCenterX, mapViewRectCenterY, areaTrigger:GetCenter());
+		local distSq = Vector2D_GetLengthSquared(mapViewRectCenterX, mapViewRectCenterY, areaTrigger:GetCenter());
 		if distSq < bestDistSq then
 			newBestAreaTrigger = areaTrigger;
 			bestDistSq = distSq;
@@ -90,13 +83,15 @@ function ZoneLabelDataProviderMixin:EvaluateBestAreaTrigger()
 		self.bestAreaTrigger = newBestAreaTrigger;
 		self.ZoneLabel.Text:SetText(newBestAreaTrigger.name);
 		self.ZoneLabel.FadeInAnim:Play();
+		self:GetMap():TriggerEvent("ZoneLabelFadeInStart", self.bestAreaTrigger.isContinent);
 
 		self.ZoneLabel:ClearAllPoints();
 		self.ZoneLabel:SetPoint(self:CalculateAnchorsForAreaTrigger(newBestAreaTrigger));
 
 	elseif self.bestAreaTrigger and self.bestAreaTrigger ~= newBestAreaTrigger then
-		self.bestAreaTrigger = nil;
 		self.ZoneLabel.FadeOutAnim:Play();
+		self:GetMap():TriggerEvent("ZoneLabelFadeOutStart", self.bestAreaTrigger.isContinent);
+		self.bestAreaTrigger = nil;
 	end
 end
 
@@ -121,6 +116,27 @@ function ZoneLabelDataProviderMixin:CalculateAnchorsForAreaTrigger(areaTrigger)
 	end
 
 	local x, y = areaTrigger:GetCenter();
+
+	local mapID = self:GetMap():GetMapID();
+	local helpTextPosition = C_Map.GetMapArtHelpTextPosition(mapID);
+
+	local helpTextOnBottom = (helpTextPosition == Enum.MapCanvasPosition.BottomLeft) or (helpTextPosition == Enum.MapCanvasPosition.BottomRight);
+	local helpTextOnTop = (helpTextPosition == Enum.MapCanvasPosition.TopLeft) or (helpTextPosition == Enum.MapCanvasPosition.TopRight);
+
+	if helpTextOnBottom and (y > .5) then
+		if helpTextPosition == Enum.MapCanvasPosition.BottomLeft then
+			x = 1.0;
+		else
+			x = 0;
+		end
+	elseif helpTextOnTop and (y <= .5) then
+		if helpTextPosition == Enum.MapCanvasPosition.TopLeft then
+			x = 1.0;
+		else
+			x = 0;
+		end
+	end
+
 	if x < .5 then
 		if x > .45 then
 			if y > .5 then
@@ -203,9 +219,14 @@ function ZoneLabelDataProviderMixin:AddZone(zoneMapID, zoneName, left, right, to
 end
 
 function ZoneLabelDataProviderMixin:AddContinent()
+	local mapInfo = MapUtil.GetMapParentInfo(self:GetMap():GetMapID(), Enum.UIMapType.Continent);
+	if not mapInfo then
+		return;
+	end
+
 	local areaTrigger = self:GetMap():AcquireAreaTrigger("ZoneLabelDataProvider_ZoneLabel");
 	areaTrigger.owner = self;
-	areaTrigger.name = select(2, C_MapCanvas.GetContinentInfo(self:GetMap():GetMapID()));
+	areaTrigger.name = mapInfo.name;
 	areaTrigger.isContinent = true;
 
 	self:GetMap():SetAreaTriggerEnclosedCallback(areaTrigger, OnAreaEnclosedChanged);

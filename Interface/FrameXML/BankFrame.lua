@@ -37,6 +37,12 @@ function BankFrameBagButton_OnEvent (self, event, ...)
 	end
 end
 
+BankItemButtonBagMixin = {};
+
+function BankItemButtonBagMixin:GetItemContextMatchResult()
+	return ItemButtonUtil.GetItemContextMatchResultForContainer(self:GetID() + NUM_BAG_SLOTS);
+end
+
 function BankFrameItemButton_OnEnter (self)
 	GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
 
@@ -77,7 +83,7 @@ function BankFrameItemButton_Update (button)
 	local texture = button.icon;
 	local inventoryID = button:GetInventorySlot();
 	local textureName = GetInventoryItemTexture("player",inventoryID);
-	local _, _, _, quality, _, _, _, isFiltered, _, itemID = GetContainerItemInfo(container, buttonID);
+	local _, _, _, quality, _, _, _, isFiltered, _, itemID, isBound = GetContainerItemInfo(container, buttonID);
 	local slotName = button:GetName();
 	local id;
 	local slotTextureName;
@@ -113,16 +119,20 @@ function BankFrameItemButton_Update (button)
 		SetItemButtonCount(button,0);
 	end
 	
-	if ( isFiltered ) then
-		button.searchOverlay:Show();
-	else
-		button.searchOverlay:Hide();
-	end
+	button:UpdateItemContextMatching();
+	button:SetMatchesSearch(not isFiltered);
 
-	SetItemButtonQuality(button, quality, itemID);
+	local doNotSuppressOverlays = false;
+	SetItemButtonQuality(button, quality, itemID, doNotSuppressOverlays, isBound);
 
 	BankFrameItemButton_UpdateLocked(button);
 	BankFrame_UpdateCooldown(container, button);
+end
+
+BankItemButtonMixin = {};
+
+function BankItemButtonMixin:GetItemContextMatchResult()
+	return ItemButtonUtil.GetItemContextMatchResultForItem(ItemLocation:CreateFromBagAndSlot(self:GetParent():GetID(), self:GetID()));
 end
 
 function BankFrame_UpdateCooldown(container, button)
@@ -158,7 +168,7 @@ function BankSlotsFrame_OnLoad(self)
 
 	--Create bank item buttons, button background textures, and rivets between buttons
 	for i = 2, 28 do
-		local button = CreateFrame("Button", "BankFrameItem"..i, self, "BankItemButtonGenericTemplate");
+		local button = CreateFrame("ItemButton", "BankFrameItem"..i, self, "BankItemButtonGenericTemplate");
 		button:SetID(i);
 		self["Item"..i] = button;
 		if ((i%7) == 1) then
@@ -283,8 +293,15 @@ function BankFrame_OnEvent (self, event, ...)
 	end
 end
 
+function BankFrame_UpdateItems(self)
+	for i=1, NUM_BANKGENERIC_SLOTS, 1 do
+		local button = BankSlotsFrame["Item"..i];
+		BankFrameItemButton_Update(button);
+	end
+end
+
 function BankFrame_OnShow (self)
-	PlaySound("igMainMenuOpen");
+	PlaySound(SOUNDKIT.IG_MAINMENU_OPEN);
 
 	self:RegisterEvent("ITEM_LOCK_CHANGED");
 	self:RegisterEvent("PLAYERBANKSLOTS_CHANGED");
@@ -294,14 +311,10 @@ function BankFrame_OnShow (self)
 	self:RegisterEvent("BAG_UPDATE_COOLDOWN");
 	self:RegisterEvent("INVENTORY_SEARCH_UPDATE");
 
-	local button;
-	for i=1, NUM_BANKGENERIC_SLOTS, 1 do
-		button = BankSlotsFrame["Item"..i];
-		BankFrameItemButton_Update(button);
-	end
+	BankFrame_UpdateItems(self);
 	
 	for i=1, NUM_BANKBAGSLOTS, 1 do
-		button = BankSlotsFrame["Bag"..i];
+		local button = BankSlotsFrame["Bag"..i];
 		BankFrameItemButton_Update(button);
 	end
 	UpdateBagSlotStatus();
@@ -310,17 +323,21 @@ function BankFrame_OnShow (self)
 	if(not GetCVarBitfield("closedInfoFrames", LE_FRAME_TUTORIAL_REAGENT_BANK_UNLOCK)) then
 		local numSlots,full = GetNumBankSlots();
 		if (full and not IsReagentBankUnlocked()) then
-			ReagentBankHelpBox:Show();
-		else
-			ReagentBankHelpBox:Hide();
+			local helpTipInfo = {
+				text = REAGENT_BANK_HELP,
+				buttonStyle = HelpTip.ButtonStyle.Close,
+				cvarBitfield = "closedInfoFrames",
+				bitfieldFlag = LE_FRAME_TUTORIAL_REAGENT_BANK_UNLOCK,
+				targetPoint = HelpTip.Point.RightEdgeCenter,
+				offsetX = -2,
+			};
+			HelpTip:Show(self, helpTipInfo, BankFrameTab2);
 		end
-	else
-		ReagentBankHelpBox:Hide();
 	end
 end
 
 function BankFrame_OnHide (self)
-	PlaySound("igMainMenuClose");
+	PlaySound(SOUNDKIT.IG_MAINMENU_CLOSE);
 
 	self:UnregisterEvent("ITEM_LOCK_CHANGED");
 	self:UnregisterEvent("PLAYERBANKSLOTS_CHANGED");
@@ -354,30 +371,13 @@ function BankFrameItemButtonGeneric_OnModifiedClick (self, button)
 	if ( HandleModifiedItemClick(GetContainerItemLink(container, self:GetID())) ) then
 		return;
 	end
-	if ( IsModifiedClick("SPLITSTACK") ) then
+	if ( not CursorHasItem() and IsModifiedClick("SPLITSTACK") ) then
 		local texture, itemCount, locked = GetContainerItemInfo(container, self:GetID());
-		if ( not locked and itemCount > 1) then
-			OpenStackSplitFrame(self.count, self, "BOTTOMLEFT", "TOPLEFT");
+		if ( not locked and itemCount and itemCount > 1) then
+			StackSplitFrame:OpenStackSplitFrame(self.count, self, "BOTTOMLEFT", "TOPLEFT");
 		end
 		return;
 	end
-end
-
-function UpdateBagButtonHighlight (id) 
-	local texture = BankSlotsFrame["Bag"..(id)].HighlightFrame.HighlightTexture;
-	if ( not texture ) then
-		return;
-	end
-
-	local frame;
-	for i=1, NUM_CONTAINER_FRAMES, 1 do
-		frame = _G["ContainerFrame"..i];
-		if ( ( frame:GetID() == (id + NUM_BAG_SLOTS) ) and frame:IsShown() ) then
-			texture:Show();
-			return;
-		end
-	end
-	texture:Hide();
 end
 
 function BankFrameItemButtonBag_OnClick (self, button) 
@@ -388,17 +388,15 @@ function BankFrameItemButtonBag_OnClick (self, button)
 		-- open bag
 		ToggleBag(id+NUM_BAG_SLOTS);
 	end
-	UpdateBagButtonHighlight(id);
 end
 
 function BankFrameItemButtonBag_Pickup (self)
 	local inventoryID = self:GetInventorySlot();
 	PickupBagFromSlot(inventoryID);
-	UpdateBagButtonHighlight(self:GetID());
 end
 
 function BankFrame_TabOnClick(self)
-	PlaySound("igCharacterInfoTab");
+	PlaySound(SOUNDKIT.IG_CHARACTER_INFO_TAB);
 	BankFrame_ShowPanel(BANK_PANELS[self:GetID()].name);
 end
 
@@ -450,7 +448,7 @@ end
 function BankFrame_AutoSortButtonOnClick()
 	local self = BankFrame;
 
-	PlaySound("UI_BagSorting_01");
+	PlaySound(SOUNDKIT.UI_BAG_SORTING_01);
 	if (self.activeTabIndex == 1) then
 		SortBankBags();
 	elseif (self.activeTabIndex == 2) then
@@ -473,7 +471,7 @@ function ReagentBankFrame_OnEvent(self, event, ...)
 end
 
 function ReagentBankFrame_OnShow(self)
-	ReagentBankHelpBox:Hide();
+	HelpTip:Hide(BankFrame, REAGENT_BANK_HELP);
 	SetCVarBitfield("closedInfoFrames", LE_FRAME_TUTORIAL_REAGENT_BANK_UNLOCK, true);
 
 	if(not IsReagentBankUnlocked()) then		
@@ -511,7 +509,7 @@ function ReagentBankFrame_OnShow(self)
 			local leftOffset = 6;
 			for subColumn = 1, self.numSubColumn do
 				for row = 0, self.numRow-1 do
-					local button = CreateFrame("Button", "ReagentBankFrameItem"..id, ReagentBankFrame, "ReagentBankItemButtonGenericTemplate");
+					local button = CreateFrame("ItemButton", "ReagentBankFrameItem"..id, ReagentBankFrame, "ReagentBankItemButtonGenericTemplate");
 					button:SetID(id);
 					button:SetPoint("TOPLEFT", ReagentBankFrame["BG"..column], "TOPLEFT", leftOffset, -(3+row*slotOffsetY));
 					ReagentBankFrame["Item"..id] = button;

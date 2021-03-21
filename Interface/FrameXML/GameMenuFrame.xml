@@ -6,43 +6,23 @@
 		<Anchors>
 			<Anchor point="CENTER"/>
 		</Anchors>
-		<Backdrop bgFile="Interface\DialogFrame\UI-DialogBox-Background" edgeFile="Interface\DialogFrame\UI-DialogBox-Border" tile="true">
-			<BackgroundInsets>
-				<AbsInset left="11" right="12" top="12" bottom="11"/>
-			</BackgroundInsets>
-			<TileSize>
-				<AbsValue val="32"/>
-			</TileSize>
-			<EdgeSize>
-				<AbsValue val="32"/>
-			</EdgeSize>
-		</Backdrop>
-		<Layers>
-			<Layer level="ARTWORK">
-				<Texture name="GameMenuFrameHeader" file="Interface\DialogFrame\UI-DialogBox-Header">
-					<Size x="256" y="64"/>
-					<Anchors>
-						<Anchor point="TOP" x="0" y="12"/>
-					</Anchors>
-				</Texture>
-				<FontString inherits="GameFontNormal" text="MAINMENU_BUTTON">
-					<Anchors>
-						<Anchor point="TOP" relativeTo="GameMenuFrameHeader" x="0" y="-14"/>
-					</Anchors>
-				</FontString>
-			</Layer>
-		</Layers>
 		<Frames>
-			<Button name="GameMenuButtonHelp" inherits="GameMenuButtonTemplate" text="GAMEMENU_HELP">
+			<Frame parentKey="Border" inherits="DialogBorderTemplate"/>
+			<Frame parentKey="Header" inherits="DialogHeaderTemplate">
+				<KeyValues>
+					<KeyValue key="textString" value="MAINMENU_BUTTON" type="global"/>
+				</KeyValues>
+			</Frame>
+			<Button name="GameMenuButtonHelp" inherits="GameMenuButtonTemplate" text="GAMEMENU_SUPPORT">
 				<Anchors>
 					<Anchor point="CENTER" relativePoint="TOP" x="0" y="-42"/>
 				</Anchors>
 				<Scripts>
 					<OnShow>
-						self:SetEnabled(not IsKioskModeEnabled());
+						self:SetEnabled(not Kiosk.IsEnabled());
 					</OnShow>
 					<OnClick>
-						PlaySound("igMainMenuOption");
+						PlaySound(SOUNDKIT.IG_MAINMENU_OPTION);
 						ToggleHelpFrame()
 					</OnClick>
 				</Scripts>
@@ -54,11 +34,10 @@
 				<Scripts>
 					<OnLoad>
 						self:RegisterEvent("STORE_STATUS_CHANGED");
+						self:RegisterEvent("TRIAL_STATUS_UPDATE");
 						GameMenuFrame_UpdateStoreButtonState(self);
 					</OnLoad>
-					<OnShow>
-						self:SetEnabled(not IsKioskModeEnabled());
-					</OnShow>
+					<OnShow function="GameMenuFrame_UpdateStoreButtonState"/>
 					<OnEvent function="GameMenuFrame_UpdateStoreButtonState"/>
 					<OnEnter>
 						if ( self.disabledTooltip ) then
@@ -70,7 +49,7 @@
 					</OnEnter>
 					<OnLeave function="GameTooltip_Hide"/>
 					<OnClick>
-						PlaySound("igMainMenuOption");
+						PlaySound(SOUNDKIT.IG_MAINMENU_OPTION);
 						ToggleStoreUI()
 					</OnClick>
 				</Scripts>
@@ -81,12 +60,12 @@
 				</Anchors>
 				<Scripts>
 					<OnShow>
-						self:SetEnabled(not IsKioskModeEnabled());
+						self:SetEnabled(not Kiosk.IsEnabled());
 					</OnShow>
 					<OnClick>
-						PlaySound("igMainMenuOption");
+						PlaySound(SOUNDKIT.IG_MAINMENU_OPTION);
 						HideUIPanel(GameMenuFrame);
-						SplashFrame_Open();
+						C_SplashScreen.RequestLatestSplashScreen(true);
 					</OnClick>
 				</Scripts>
 			</Button>
@@ -96,12 +75,11 @@
 				</Anchors>
 				<Scripts>
 					<OnShow>
-						self:SetEnabled(not IsKioskModeEnabled());
+						self:SetEnabled(not Kiosk.IsEnabled());
 					</OnShow>
 					<OnClick>
-						PlaySound("igMainMenuOption");
-						ShowUIPanel(VideoOptionsFrame);
-						VideoOptionsFrame.lastFrame = GameMenuFrame;
+						PlaySound(SOUNDKIT.IG_MAINMENU_OPTION);
+						ShowOptionsPanel(VideoOptionsFrame, GameMenuFrame);
 					</OnClick>
 				</Scripts>
 			</Button>
@@ -115,9 +93,8 @@
 				</Anchors>
 				<Scripts>
 					<OnClick>
-						PlaySound("igMainMenuOption");
-						ShowUIPanel(InterfaceOptionsFrame);
-						InterfaceOptionsFrame.lastFrame = GameMenuFrame;
+						PlaySound(SOUNDKIT.IG_MAINMENU_OPTION);
+						ShowOptionsPanel(InterfaceOptionsFrame, GameMenuFrame);
 					</OnClick>
 				</Scripts>
 			</Button>
@@ -127,7 +104,7 @@
 				</Anchors>
 				<Scripts>
 					<OnClick>
-						PlaySound("igMainMenuOption");
+						PlaySound(SOUNDKIT.IG_MAINMENU_OPTION);
 						KeyBindingFrame_LoadUI();
 						KeyBindingFrame.mode = 1;
 						ShowUIPanel(KeyBindingFrame);
@@ -140,7 +117,7 @@
 				</Anchors>
 				<Scripts>
 					<OnClick>
-						PlaySound("igMainMenuOption");
+						PlaySound(SOUNDKIT.IG_MAINMENU_OPTION);
 						HideUIPanel(GameMenuFrame);
 						ShowMacroFrame();
 					</OnClick>
@@ -159,10 +136,10 @@
 						end
 					</OnLoad>
 					<OnShow>
-						self:SetEnabled(not IsKioskModeEnabled() and not ScriptsDisallowedForBeta());
+						self:SetEnabled(not Kiosk.IsEnabled() and not ScriptsDisallowedForBeta());
 					</OnShow>
 					<OnClick>
-						PlaySound("igMainMenuOption");
+						PlaySound(SOUNDKIT.IG_MAINMENU_OPTION);
 						HideUIPanel(GameMenuFrame);
 						ShowUIPanel(AddonList);
 					</OnClick>
@@ -181,13 +158,13 @@
 						end
 					</OnLoad>
 					<OnClick>
-						PlaySound("igMainMenuOption");
+						PlaySound(SOUNDKIT.IG_MAINMENU_OPTION);
 						HideUIPanel(GameMenuFrame);
 						ShowUIPanel(RatingMenuFrame);
 					</OnClick>
 				</Scripts>
 			</Button>
-			<Button name="GameMenuButtonLogout" inherits="GameMenuButtonTemplate" text="LOGOUT">
+			<Button name="GameMenuButtonLogout" inherits="GameMenuButtonTemplate" text="LOG_OUT">
 				<Anchors>
 					<Anchor point="TOP" relativeTo="GameMenuButtonAddons" relativePoint="BOTTOM" x="0" y="-16"/>
 				</Anchors>
@@ -200,14 +177,14 @@
 						end
 					</OnLoad>
 					<OnShow>
-						if ( not StaticPopup_Visible("CAMP") and not StaticPopup_Visible("QUIT") ) then
+						if ( not StaticPopup_Visible("CAMP") and not StaticPopup_Visible("QUIT") and not Kiosk.IsEnabled() ) then
 							self:Enable();
 						else
 							self:Disable();
 						end
 					</OnShow>
 					<OnClick>
-						PlaySound("igMainMenuLogout");
+						PlaySound(SOUNDKIT.IG_MAINMENU_LOGOUT);
 						Logout();
 						HideUIPanel(GameMenuFrame);
 					</OnClick>
@@ -219,14 +196,14 @@
 				</Anchors>
 				<Scripts>
 					<OnShow>
-						if ( not StaticPopup_Visible("CAMP") and not StaticPopup_Visible("QUIT") and not IsKioskModeEnabled() ) then
+						if ( not StaticPopup_Visible("CAMP") and not StaticPopup_Visible("QUIT") and not Kiosk.IsEnabled() ) then
 							self:Enable();
 						else
 							self:Disable();
 						end
 					</OnShow>
 					<OnClick>
-						PlaySound("igMainMenuQuit");
+						PlaySound(SOUNDKIT.IG_MAINMENU_QUIT);
 						Quit();
 						HideUIPanel(GameMenuFrame);
 					</OnClick>
@@ -238,7 +215,7 @@
 				</Anchors>
 				<Scripts>
 					<OnClick>
-						PlaySound("igMainMenuContinue");
+						PlaySound(SOUNDKIT.IG_MAINMENU_CONTINUE);
 						HideUIPanel(GameMenuFrame);
 					</OnClick>
 				</Scripts>
@@ -249,6 +226,9 @@
 			<OnHide>
 				UpdateMicroButtons();
 				Enable_BagButtons();
+				if (CanAutoSetGamePadCursorControl(false)) then
+					SetGamePadCursorControl(false);
+				end
 			</OnHide>
 		</Scripts>
 	</Frame>

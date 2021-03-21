@@ -35,8 +35,8 @@
 					</Anchors>
 					<Color r="0.5" g="0.5" b="0.5"/>
 				</FontString>
-				<FontString parentKey="ResultsLabel" inherits="GameFontNormalMed3" justifyH="LEFT" hidden="true" >
-					<Size x="260" y="20"/>
+				<FontString parentKey="ResultsLabel" inherits="GameFontNormalMed3" justifyH="LEFT" hidden="true" maxLines="2">
+					<Size x="260" y="0"/>
 					<Anchors>
 						<Anchor point="TOPLEFT" relativeKey="$parent.StepFinishedLabel" relativePoint="BOTTOMLEFT" x="0" y="0"/>
 					</Anchors>
@@ -193,36 +193,26 @@
 				<Layers>
 					<Layer level="ARTWORK">
 						<FontString parentKey="OrLabel" inherits="GameFontNormalMed3" text="SERVICES_CONJUNCTION_OR" hidden="true">
-							<Anchors>
-								<Anchor point="TOPLEFT" relativeKey="$parent.$parent.StepActiveLabel" relativePoint="BOTTOMLEFT" x="0" y="-10"/>
-							</Anchors>
 							<Color r="0.5" g="0.5" b="0.5"/>
 						</FontString>
 						<FontString parentKey="OrLabel2" inherits="GameFontNormalMed3" text="SERVICES_CONJUNCTION_OR" hidden="true">
-							<Anchors>
-								<Anchor point="TOPLEFT" x="84" y="-128" />
-							</Anchors>
+							<Color r="0.5" g="0.5" b="0.5"/>
+						</FontString>
+						<FontString parentKey="ClassTrialButtonHintText" inherits="GameFontNormalMed3" justifyH="LEFT" justifyV="TOP" hidden="true" text="SERVICES_TRIAL_BOOST_HINT">
+							<Size x="260" y="45"/>
 							<Color r="0.5" g="0.5" b="0.5"/>
 						</FontString>
 					</Layer>
 				</Layers>
 				<Frames>
 					<Button parentKey="CreateCharacterButton" inherits="GlueButtonTemplate" text="CREATE_NEW_CHARACTER" hidden="true">
-						<Anchors>
-							<Anchor point="TOPLEFT" relativeKey="$parent.OrLabel" relativePoint="BOTTOMLEFT" x="0.0" y="-5.0" />
-						</Anchors>
 						<Scripts>
 							<OnClick function="CharacterUpgradeCreateCharacter_OnClick"/>
-							<OnUpdate function="GlueParent_DeathKnightButtonSwap"/>
 						</Scripts>
 					</Button>
 					<Button parentKey="CreateCharacterClassTrialButton" inherits="GlueButtonTemplate" text="CHARACTER_UPGRADE_POPUP_TRY_NEW_CLASS" hidden="true">
-						<Anchors>
-							<Anchor point="TOPLEFT" relativeKey="$parent.OrLabel2" relativePoint="BOTTOMLEFT" x="0" y="-5.0" />
-						</Anchors>
 						<Scripts>
 							<OnClick function="CharacterUpgradeClassTrial_OnClick"/>
-							<OnUpdate function="GlueParent_DeathKnightButtonSwap"/>
 						</Scripts>
 					</Button>
 					<Frame parentKey="GlowBox">
@@ -377,7 +367,7 @@
 		</Layers>
 		<Frames>
 			<Button parentKey="CloseButton" inherits="GlueButtonSmallTemplate" text="CLOSE">
-				<Size x="140" y="34"/>
+				<Size x="140" y="28"/>
 				<Anchors>
 					<Anchor point="TOP" relativeKey="$parent.Label" relativePoint="BOTTOM" x="0" y="-40"/>
 				</Anchors>
@@ -400,13 +390,28 @@
 		<Frames>
 			<Frame parentKey="ControlsFrame" setAllPoints="true">
 				<Frames>
-					<CheckButton parentArray="FactionButtons" inherits="CharacterUpgradeSelectFactionRadioButtonTemplate" id="1">
+					<CheckButton parentKey="HordeButton" parentArray="FactionButtons" inherits="CharacterUpgradeSelectFactionRadioButtonTemplate">
+						<KeyValues>
+							<KeyValue key="factionID" value="0" type="number"/>
+						</KeyValues>
 						<Anchors>
 							<Anchor point="TOPLEFT" x="83" y="-73"/>
+						</Anchors>
+					</CheckButton>
+					<CheckButton parentKey="AllianceButton" parentArray="FactionButtons" inherits="CharacterUpgradeSelectFactionRadioButtonTemplate">
+						<KeyValues>
+							<KeyValue key="factionID" value="1" type="number"/>
+						</KeyValues>
+						<Anchors>
+							<Anchor point="TOP" relativeKey="$parent.HordeButton" relativePoint="BOTTOM" x="0" y="-35"/>
 						</Anchors>
 					</CheckButton>
 				</Frames>
 			</Frame>
 		</Frames>
+		<Scripts>
+			<OnLoad function="CharacterUpgradeSelectFactionFrame_OnLoad"/>
+			<OnHide function="CharacterUpgradeSelectFactionFrame_ClearChecked"/>
+		</Scripts>
 	</Frame>
 </Ui>

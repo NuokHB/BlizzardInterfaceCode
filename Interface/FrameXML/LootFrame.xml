@@ -1,7 +1,7 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/
 ..\FrameXML\UI.xsd">
 	<Script file="LootFrame.lua"/>
-	<Button name="LootButtonTemplate" inherits="ItemButtonTemplate" virtual="true">
+	<ItemButton name="LootButtonTemplate" virtual="true">
 		<HitRectInsets>
 			<AbsInset left="0" right="-107" top="0" bottom="0"/>
 		</HitRectInsets>
@@ -55,7 +55,7 @@
 				end
 			</OnClick>
 		</Scripts>
-	</Button>
+	</ItemButton>
 	<Button name="LootRollButtonTemplate" motionScriptsWhileDisabled="true" virtual="true">
 		<Size x="32" y="32"/>
 		<Scripts>
@@ -64,11 +64,11 @@
 			</OnClick>
 			<OnEnter>
 				GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
-				GameTooltip_AddNewbieTip(self, self.tooltipText, 1.0, 1.0, 1.0, self.newbieText);
+				GameTooltip_SetTitle(GameTooltip, self.tooltipText);
 				if ( not self:IsEnabled() ) then
 					GameTooltip:AddLine(self.reason, RED_FONT_COLOR.r, RED_FONT_COLOR.g, RED_FONT_COLOR.b, true);
-					GameTooltip:Show();
 				end
+				GameTooltip:Show();
 			</OnEnter>
 			<OnLeave>
 				GameTooltip:Hide();
@@ -108,27 +108,27 @@
 			</Layer>
 		</Layers>
 		<Frames>
-			<Button name="LootButton1" inherits="LootButtonTemplate" id="1">
+			<ItemButton name="LootButton1" inherits="LootButtonTemplate" id="1">
 				<Anchors>
 					<Anchor point="TOPLEFT" x="9" y="-68"/>
 				</Anchors>
-			</Button>
+			</ItemButton>
 			<!-- anchors not relative - see bug 266687 -->
-			<Button name="LootButton2" inherits="LootButtonTemplate" id="2">
+			<ItemButton name="LootButton2" inherits="LootButtonTemplate" id="2">
 				<Anchors>
 					<Anchor point="TOPLEFT" x="9" y="-109"/>
 				</Anchors>
-			</Button>
-			<Button name="LootButton3" inherits="LootButtonTemplate" id="3">
+			</ItemButton>
+			<ItemButton name="LootButton3" inherits="LootButtonTemplate" id="3">
 				<Anchors>
 					<Anchor point="TOPLEFT" x="9" y="-150"/>
 				</Anchors>
-			</Button>
-			<Button name="LootButton4" inherits="LootButtonTemplate" id="4">
+			</ItemButton>
+			<ItemButton name="LootButton4" inherits="LootButtonTemplate" id="4">
 				<Anchors>
 					<Anchor point="TOPLEFT" x="9" y="-193"/>
 				</Anchors>
-			</Button>
+			</ItemButton>
 			<Button name="LootFrameUpButton">
 				<Size x="32" y="32"/>
 				<Anchors>
@@ -215,7 +215,7 @@
 			</Layer>
 			<Layer level="BORDER">
 				<!--BonusRoll-LootSpinnerBG-->
-				<Texture parentKey="LootSpinnerBG" file="Interface\LootFrame\LootToast">
+				<Texture parentKey="LootSpinnerBG" file="Interface\LootFrame\LootToast" hidden="true">
 					<Size x="42" y="42"/>
 					<Anchors>
 						<Anchor point="TOPLEFT" relativeKey="$parent.Background" relativePoint="TOPLEFT" x="11" y="-12"/>
@@ -225,7 +225,7 @@
 			</Layer>
 			<Layer level="OVERLAY" textureSubLevel="1">
 				<!--ItemBorder-Gold-->
-				<Texture parentKey="IconBorder" file="Interface\LootFrame\LootToast">
+				<Texture parentKey="IconBorder" file="Interface\LootFrame\LootToast"  hidden="true">
 					<Size x="42" y="42"/>
 					<Anchors>
 						<Anchor point="CENTER" relativeKey="$parent.LootSpinnerBG" relativePoint="CENTER" x="0" y="0"/>
@@ -249,7 +249,7 @@
 				</Texture>
 			</Layer>
 			<Layer level="OVERLAY" textureSubLevel="4">
-				<Texture parentKey="WhiteFade" blendMode="ADD" alpha="0">
+				<Texture parentKey="WhiteFade" alphaMode="ADD" alpha="0">
 					<Anchors>
 						<Anchor point="TOPLEFT" x="3" y="-3"/>
 						<Anchor point="BOTTOMRIGHT" x="-3" y="3"/>
@@ -298,15 +298,27 @@
 			<Frame parentKey="PromptFrame" useParentLevel="true" setAllPoints="true" hidden="true">
 				<Layers>
 					<Layer level="ARTWORK">
-						<Texture parentKey="Icon" file="Interface\Icons\INV_Misc_Dice_02">
-							<Size x="36" y="36"/>
+						<Texture parentKey="Icon" atlas="BonusLoot-Chest">
+							<Size x="45" y="45"/>
 							<Anchors>
-								<Anchor point="TOPLEFT" relativeKey="$parent.$parent.Background" x="14" y="-15"/>
+								<Anchor point="TOPLEFT" relativeKey="$parent.$parent.Background" x="9" y="-11"/>
 							</Anchors>
 						</Texture>
 					</Layer>
 				</Layers>
 				<Frames>
+					<Button parentKey="EncounterJournalLinkButton" mixin="EncounterJournalLinkButtonMixin">
+						<Size x="185" y="40"/>
+						<Anchors>
+							<Anchor point="TOPLEFT" x="11" y="-13"/>
+						</Anchors>
+						<Scripts>
+							<OnShow method="OnShow"/>
+							<OnEnter method="OnEnter"/>
+							<OnLeave function="GameTooltip_Hide"/>
+							<OnClick method="OnClick"/>
+						</Scripts>
+					</Button>
 					<Frame parentKey="InfoFrame">
 						<Size x="135" y="38"/>
 						<Anchors>
@@ -330,15 +342,6 @@
 								</FontString>
 							</Layer>
 						</Layers>
-						<Scripts>
-							<OnEnter>
-								GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
-								GameTooltip:SetText(BONUS_ROLL_TOOLTIP_TITLE, HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b);
-								GameTooltip:AddLine(BONUS_ROLL_TOOLTIP_TEXT, nil, nil, nil, true);
-								GameTooltip:Show();
-							</OnEnter>
-							<OnLeave function="GameTooltip_Hide"/>
-						</Scripts>
 					</Frame>
 					<StatusBar parentKey="Timer" drawLayer="ARTWORK" minValue="0" maxValue="60000" defaultValue="0">
 						<Size x="190" y="9"/>
@@ -354,6 +357,9 @@
 							<Anchor point="TOPRIGHT" x="-48" y="-16"/>
 						</Anchors>
 						<Scripts>
+							<OnShow>
+								self:SetEnabled(true);
+							</OnShow>
 							<OnEnter>
 								GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
 								GameTooltip:SetText(ROLL);
@@ -362,6 +368,7 @@
 							<OnLeave function="GameTooltip_Hide"/>
 							<OnClick>
 								AcceptSpellConfirmationPrompt(self:GetParent():GetParent().spellID);
+								self:SetEnabled(false);
 							</OnClick>
 						</Scripts>
 						<NormalTexture file="Interface\Buttons\UI-GroupLoot-Dice-Up"/>
@@ -416,7 +423,7 @@
 				<Scripts>
 					<OnEnter>
 						GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
-						GameTooltip:SetCurrencyByID(self:GetParent().currencyID);
+						GameTooltip:SetCurrencyByID(self.currencyID);
 						GameTooltip:Show();
 					</OnEnter>
 					<OnLeave function="GameTooltip_Hide"/>
@@ -597,38 +604,34 @@
 			<OnEvent function="GroupLootFrame_OnEvent"/>
 		</Scripts>
 	</Frame>
-	<Frame name="GroupLootContainer" parent="UIParent" hidden="true">
+	<ContainedAlertFrame name="GroupLootContainer" parent="UIParent" hidden="true">
 		<Size x="256" y="1"/>
 		<Scripts>
-			<OnShow>
-				AlertFrame:UpdateAnchors();
-			</OnShow>
-			<OnHide>
-				AlertFrame:UpdateAnchors();
-			</OnHide>
 			<OnLoad function="GroupLootContainer_OnLoad"/>
 		</Scripts>
-	</Frame>
+	</ContainedAlertFrame>
 	<Frame name="GroupLootFrame1" inherits="GroupLootFrameTemplate" id="1"/>
 	<Frame name="GroupLootFrame2" inherits="GroupLootFrameTemplate" id="2"/>
 	<Frame name="GroupLootFrame3" inherits="GroupLootFrameTemplate" id="3"/>
 	<Frame name="GroupLootFrame4" inherits="GroupLootFrameTemplate" id="4"/>
 	<Frame name="BonusRollFrame" inherits="BonusRollFrameTemplate"/>
-	<Button name="BonusRollLootWonFrame" inherits="LootWonAlertFrameTemplate">
+	<ContainedAlertFrame name="BonusRollLootWonFrame" inherits="LootWonAlertFrameTemplate">
 		<Scripts>
+			<OnLoad inherit="append" function="BonusRollLootWonFrame_OnLoad"/>
 			<OnHide>
 				GroupLootContainer_RemoveFrame(GroupLootContainer, self);
 			</OnHide>
 			<OnClick function="LootWonAlertFrame_OnClick"/>
 		</Scripts>
-	</Button>
-	<Button name="BonusRollMoneyWonFrame" inherits="MoneyWonAlertFrameTemplate">
+	</ContainedAlertFrame>
+	<ContainedAlertFrame name="BonusRollMoneyWonFrame" inherits="MoneyWonAlertFrameTemplate">
 		<Scripts>
+			<OnLoad inherit="append" function="BonusRollMoneyWonFrame_OnLoad"/>
 			<OnHide>
 				GroupLootContainer_RemoveFrame(GroupLootContainer, self);
 			</OnHide>
 		</Scripts>
-	</Button>
+	</ContainedAlertFrame>
 
 	<Button name="MasterLooterPlayerTemplate" virtual="true">
 		<Size x="98" y="23"/>
@@ -642,7 +645,7 @@
 				<Texture parentKey="Highlight" file="Interface\QuestFrame\UI-QuestTitleHighlight" alphaMode="ADD" setAllPoints="true" hidden="true"/>
 			</Layer>
 			<Layer level="ARTWORK">
-				<FontString inherits="GameFontNormal" parentKey="Name" justifyH="LEFT" justifyV="CENTER">
+				<FontString inherits="GameFontNormal" parentKey="Name" justifyH="LEFT" justifyV="MIDDLE">
 					<Size x="78" y="12"/>
 					<Anchors>
 						<Anchor point="LEFT" x="10" y="0"/>

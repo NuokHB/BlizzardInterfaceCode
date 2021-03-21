@@ -1,50 +1,95 @@
 ALERT_FRAME_COALESCE_CONTINUE = 1; -- Return to continue trying to find an alert to coalesce on to, coalescing failed
 ALERT_FRAME_COALESCE_SUCCESS = 2; -- Return to signal coalescing was a success and that there's no longer a need to continue trying to coalesce onto other frames
 
--- [[ AlertFrameJustAnchorMixin ]] --
--- Used to insert a frame into the anchoring hierarchy
-function CreateJustAnchorAlertSystem(anchorFrame)
-	local justAnchorAlertSystem = CreateFromMixins(AlertFrameJustAnchorMixin);
-	justAnchorAlertSystem:OnLoad(anchorFrame);
-	return justAnchorAlertSystem;
+-- [[ ContainedAlertSystem ]] --
+
+ContainedAlertSubSystemMixin = {};
+
+function ContainedAlertSubSystemMixin:OnLoad(containedAlertFrame)
+	self:ContainFrame(containedAlertFrame);
 end
 
-AlertFrameJustAnchorMixin = {};
+function ContainedAlertSubSystemMixin:ContainFrame(containedAlertFrame)
+	containedAlertFrame:SetAlertContainer(self:GetAlertContainer());
+end
 
-function AlertFrameJustAnchorMixin:OnLoad(anchorFrame)
+function ContainedAlertSubSystemMixin:SetAlertContainer(alertContainer)
+	self.alertContainer = alertContainer;
+end
+
+function ContainedAlertSubSystemMixin:GetAlertContainer()
+	return self.alertContainer;
+end
+
+-- [[ AlertFrameExternallyAnchoredMixin ]] --
+-- Used to insert a frame into the anchoring hierarchy, but that frame is positioned by something else.
+-- This only serves to all the rest of the systems to pass through this frame
+-- or use it in the anchoring chain.
+AlertFrameExternallyAnchoredMixin = CreateFromMixins(ContainedAlertSubSystemMixin);
+
+function AlertFrameExternallyAnchoredMixin:OnLoad(anchorFrame)
+	ContainedAlertSubSystemMixin.OnLoad(self, anchorFrame);
 	self.anchorFrame = anchorFrame;
 end
 
-function AlertFrameJustAnchorMixin:AdjustAnchors(relativeAlert)
+function AlertFrameExternallyAnchoredMixin:AdjustAnchors(relativeAlert)
 	if self.anchorFrame:IsShown() then
 		return self.anchorFrame;
 	end
 	return relativeAlert;
 end
 
-function AlertFrameJustAnchorMixin:CheckQueuedAlerts()
+function AlertFrameExternallyAnchoredMixin:CheckQueuedAlerts()
+	-- Nothing can be queued on this.
+end
+
+-- [[ AlertFrameAutoAnchoredMixin ]] --
+-- Used to insert a frame into the anchoring hierarchy, and this frame knows how to
+-- automatically position itself relative to the other contained alerts based on
+-- justification from the container it belongs to.
+AlertFrameAutoAnchoredMixin = CreateFromMixins(ContainedAlertSubSystemMixin);
+
+function AlertFrameAutoAnchoredMixin:OnLoad(anchorFrame)
+	ContainedAlertSubSystemMixin.OnLoad(self, anchorFrame);
+	self.anchorFrame = anchorFrame;
+end
+
+function AlertFrameAutoAnchoredMixin:AdjustAnchors(relativeAlert)
+	local anchorFrame = self.anchorFrame;
+
+	if anchorFrame:IsShown() then
+		local point, relativePoint = anchorFrame:GetAlertContainer():GetPointsForJustification(relativeAlert);
+
+		anchorFrame:ClearAllPoints();
+		anchorFrame:SetPoint(point, relativeAlert, relativePoint, 0, 0);
+
+		if anchorFrame.OnAlertAnchorUpdated then
+			anchorFrame:OnAlertAnchorUpdated();
+		end
+
+		return anchorFrame;
+	end
+
+	return relativeAlert;
+end
+
+function AlertFrameAutoAnchoredMixin:CheckQueuedAlerts()
 	-- Nothing can be queued on this.
 end
 
 -- [[ AlertFrameQueueMixin ]] --
 -- A more complex alert frame system that can show multiple alerts and optionally queue additional alerts if the visible slots are full
-function CreateAlertFrameQueueSystem(alertFrameTemplate, setUpFunction, maxAlerts, maxQueue, coalesceFunction)
-	local alertFrameQueue = CreateFromMixins(AlertFrameQueueMixin);
-	alertFrameQueue:OnLoad(alertFrameTemplate, setUpFunction, maxAlerts, maxQueue, coalesceFunction);
-	return alertFrameQueue;
-end
-
-AlertFrameQueueMixin = {};
+AlertFrameQueueMixin = CreateFromMixins(ContainedAlertSubSystemMixin);
 
 function OnPooledAlertFrameQueueReset(framePool, frame)
 	FramePool_HideAndClearAnchors(framePool, frame);
 	if frame.queue and not frame.queue:CheckQueuedAlerts() then
-		AlertFrame:UpdateAnchors();
+		frame.queue:GetAlertContainer():UpdateAnchors();
 	end
 end
 
 function AlertFrameQueueMixin:OnLoad(alertFrameTemplate, setUpFunction, maxAlerts, maxQueue, coalesceFunction)
-	self.alertFramePool = CreateFramePool("BUTTON", UIParent, alertFrameTemplate, OnPooledAlertFrameQueueReset);
+	self.alertFramePool = CreateFramePool("ContainedAlertFrame", UIParent, alertFrameTemplate, OnPooledAlertFrameQueueReset);
 	self.setUpFunction = setUpFunction;
 	self.coalesceFunction = coalesceFunction;
 	self.maxAlerts = maxAlerts or 2;
@@ -72,6 +117,10 @@ function AlertFrameQueueMixin:AddAlert(...)
 		return true;
 	end
 	return false;
+end
+
+function AlertFrameQueueMixin:AddLocalizationHook(func)
+	self.localizationHook = func;
 end
 
 function AlertFrameQueueMixin:ApplyCoalesceData(...)
@@ -115,8 +164,13 @@ function AlertFrameQueueMixin:ShowAlert(...)
 	local alertFrame, isNew = self.alertFramePool:Acquire();
 
 	if isNew then
+		self:ContainFrame(alertFrame);
 		alertFrame.queue = self;
 		alertFrame:SetScript("OnHide", OnPooledAlertFrameQueueHide);
+
+		if self.localizationHook then
+			self.localizationHook(alertFrame);
+		end
 	end
 
 	if self.setUpFunction then
@@ -127,7 +181,7 @@ function AlertFrameQueueMixin:ShowAlert(...)
 		end
 	end
 
-	AlertFrame:AddAlertFrame(alertFrame);
+	self:GetAlertContainer():AddAlertFrame(alertFrame);
 	self:CheckQueuedCoalesceData();
 
 	return true;
@@ -160,7 +214,7 @@ function AlertFrameQueueMixin:GetNumQueuedAlerts()
 end
 
 function AlertFrameQueueMixin:CanShowMore()
-	if AlertFrame:AreAlertsEnabled() then
+	if self:GetAlertContainer():AreAlertsEnabled() then
 		if self:ShouldAlwaysReplace() or self:GetNumVisibleAlerts() < self.maxAlerts then
 			if (not self.canShowMoreConditionFunc or self.canShowMoreConditionFunc()) then
 				return true;
@@ -195,33 +249,11 @@ function AlertFrameQueueMixin:SetCanShowMoreConditionFunc(canShowMoreConditionFu
 	self.canShowMoreConditionFunc = canShowMoreConditionFunc;
 end
 
--- [[ AlertFrameMixin ]] --
-AlertFrameMixin = {};
+-- [[ AlertContainerMixin ]] --
 
-function AlertFrameMixin:OnLoad()
-	self:RegisterEvent("ACHIEVEMENT_EARNED");
-	self:RegisterEvent("CRITERIA_EARNED");
-	self:RegisterEvent("LFG_COMPLETION_REWARD");
-	self:RegisterEvent("SCENARIO_COMPLETED");
-	self:RegisterEvent("LOOT_ITEM_ROLL_WON");
-	self:RegisterEvent("SHOW_LOOT_TOAST");
-	self:RegisterEvent("SHOW_LOOT_TOAST_UPGRADE");
-	self:RegisterEvent("SHOW_PVP_FACTION_LOOT_TOAST");
-	self:RegisterEvent("SHOW_RATED_PVP_REWARD_TOAST");
-	self:RegisterEvent("PET_BATTLE_CLOSE");
-	self:RegisterEvent("STORE_PRODUCT_DELIVERED");
-	self:RegisterEvent("GARRISON_BUILDING_ACTIVATABLE");
-    self:RegisterEvent("GARRISON_TALENT_COMPLETE");
-	self:RegisterEvent("GARRISON_MISSION_FINISHED");
-	self:RegisterEvent("GARRISON_FOLLOWER_ADDED");
-	self:RegisterEvent("GARRISON_RANDOM_MISSION_ADDED");
-	self:RegisterEvent("NEW_RECIPE_LEARNED");
-	self:RegisterEvent("SHOW_LOOT_TOAST_LEGENDARY_LOOTED");
-	self:RegisterEvent("QUEST_TURNED_IN");
-	self:RegisterEvent("QUEST_LOOT_RECEIVED");
-	self:RegisterEvent("PLAYER_ENTERING_WORLD");
-	self:RegisterEvent("VARIABLES_LOADED");
+AlertContainerMixin = {};
 
+function AlertContainerMixin:OnLoad()
 	self.alertFrameSubSystems = {};
 
 	-- True must always mean that a system is enabled, a single false will cause the system to queue alerts.
@@ -229,9 +261,20 @@ function AlertFrameMixin:OnLoad()
 		playerEnteredWorld = false,
 		variablesLoaded = false,
 	};
+
+	self:RegisterEvent("PLAYER_ENTERING_WORLD");
+	self:RegisterEvent("VARIABLES_LOADED");
 end
 
-function AlertFrameMixin:SetEnabledFlag(flagName, enabled)
+function AlertContainerMixin:OnEvent(event, ...)
+	if event == "PLAYER_ENTERING_WORLD" then
+		self:SetPlayerEnteredWorld();
+	elseif event == "VARIABLES_LOADED" then
+		self:SetVariablesLoaded();
+	end
+end
+
+function AlertContainerMixin:SetEnabledFlag(flagName, enabled)
 	local wereAlertsEnabled = self:AreAlertsEnabled();
 	self.shouldQueueAlertsFlags[flagName] = enabled;
 	local areAlertsEnabled = self:AreAlertsEnabled();
@@ -243,21 +286,21 @@ function AlertFrameMixin:SetEnabledFlag(flagName, enabled)
 	end
 end
 
-function AlertFrameMixin:SetPlayerEnteredWorld()
+function AlertContainerMixin:SetPlayerEnteredWorld()
 	self:UnregisterEvent("PLAYER_ENTERING_WORLD");
 	self:SetEnabledFlag("playerEnteredWorld", true);
 end
 
-function AlertFrameMixin:SetVariablesLoaded()
+function AlertContainerMixin:SetVariablesLoaded()
 	self:UnregisterEvent("VARIABLES_LOADED");
 	self:SetEnabledFlag("variablesLoaded", true);
 end
 
-function AlertFrameMixin:SetAlertsEnabled(enabled, reason)
+function AlertContainerMixin:SetAlertsEnabled(enabled, reason)
 	self:SetEnabledFlag(reason, enabled);
 end
 
-function AlertFrameMixin:AreAlertsEnabled()
+function AlertContainerMixin:AreAlertsEnabled()
 	for flagType, flagValue in pairs(self.shouldQueueAlertsFlags) do
 		if not flagValue then return false; end
 	end
@@ -265,17 +308,161 @@ function AlertFrameMixin:AreAlertsEnabled()
 	return true;
 end
 
-function AlertFrameMixin:OnEvent(event, ...)
-	if ( event == "PLAYER_ENTERING_WORLD" ) then
-		self:SetPlayerEnteredWorld();
-		return;
-	elseif ( event == "VARIABLES_LOADED" ) then
-		self:SetVariablesLoaded();
-		return;
+function AlertContainerMixin:CreateSubSystem(subSystemMixin, ...)
+	local subSystem = CreateFromMixins(subSystemMixin);
+	subSystem:SetAlertContainer(self);
+	subSystem:OnLoad(...);
+	return subSystem;
+end
+
+function AlertContainerMixin:AddExternallyAnchoredSubSystem(anchorFrame)
+	local subSystem = self:CreateSubSystem(AlertFrameExternallyAnchoredMixin, anchorFrame);
+	return self:AddAlertFrameSubSystem(subSystem);
+end
+
+function AlertContainerMixin:AddAutoAnchoredSubSystem(anchorFrame)
+	local subSystem = self:CreateSubSystem(AlertFrameAutoAnchoredMixin, anchorFrame);
+	return self:AddAlertFrameSubSystem(subSystem);
+end
+
+function AlertContainerMixin:CreateQueuedSubSystem(alertFrameTemplate, setUpFunction, maxAlerts, maxQueue, coalesceFunction)
+	return self:CreateSubSystem(AlertFrameQueueMixin, alertFrameTemplate, setUpFunction, maxAlerts, maxQueue, coalesceFunction);
+end
+
+function AlertContainerMixin:AddSimpleAlertFrameSubSystem(alertFrameTemplate, setUpFunction, coalesceFunction)
+	local subSystem = self:AddAlertFrameSubSystem(self:CreateQueuedSubSystem(alertFrameTemplate, setUpFunction, 1, 1, coalesceFunction));
+	subSystem:SetAlwaysReplace(true);
+	return subSystem;
+end
+
+function AlertContainerMixin:AddQueuedAlertFrameSubSystem(alertFrameTemplate, setUpFunction, maxAlerts, maxQueue, coalesceFunction)
+	return self:AddAlertFrameSubSystem(self:CreateQueuedSubSystem(alertFrameTemplate, setUpFunction, maxAlerts, maxQueue, coalesceFunction));
+end
+
+function AlertContainerMixin:AddAlertFrameSubSystem(alertFrameSubSystem)
+	self.alertFrameSubSystems[#self.alertFrameSubSystems + 1] = alertFrameSubSystem;
+
+	local STARTING_PRIORITY = 1000;
+	self:SetSubSystemAnchorPriority(alertFrameSubSystem, STARTING_PRIORITY + #self.alertFrameSubSystems * 10);
+	return alertFrameSubSystem;
+end
+
+function AlertContainerMixin:SetSubSystemAnchorPriority(alertFrameSubSystem, priority)
+	alertFrameSubSystem.anchorPriority = priority;
+	self.anchorPrioritiesDirty = true;
+end
+
+do
+	local function AnchorPriorityComparator(left, right)
+		return left.anchorPriority < right.anchorPriority;
 	end
 
+	function AlertContainerMixin:CleanAnchorPriorities()
+		if self.anchorPrioritiesDirty then
+			self.anchorPrioritiesDirty = nil;
+			table.sort(self.alertFrameSubSystems, AnchorPriorityComparator);
+		end
+	end
+end
+
+function AlertContainerMixin:UpdateAnchors()
+	self:CleanAnchorPriorities();
+
+	local relativeFrame = self;
+	for i, alertFrameSubSystem in ipairs(self.alertFrameSubSystems) do
+		relativeFrame = alertFrameSubSystem:AdjustAnchors(relativeFrame);
+	end
+end
+
+function AlertContainerMixin:SetJustification(justification)
+	if self.justification ~= justification then
+		self.justification = justification;
+		self:UpdateAnchors();
+	end
+end
+
+function AlertContainerMixin:GetJustification()
+	return self.justification or "CENTER";
+end
+
+local justificationLookupsForInitialFrame =
+{
+	["LEFT"] = { point = "BOTTOMLEFT", relativePoint = "BOTTOMLEFT" },
+	["CENTER"] = { point = "BOTTOM", relativePoint = "BOTTOM" },
+	["RIGHT"] = { point = "BOTTOMRIGHT", relativePoint = "BOTTOMRIGHT" },
+};
+
+local justificationLookupsForSubsequentFrames =
+{
+	["LEFT"] = { point = "BOTTOMLEFT", relativePoint = "TOPLEFT" },
+	["CENTER"] = { point = "BOTTOM", relativePoint = "TOP" },
+	["RIGHT"] = { point = "BOTTOMRIGHT", relativePoint = "TOPRIGHT" },
+};
+
+function AlertContainerMixin:GetPointsForJustification(relativeFrame)
+	local justification = self:GetJustification();
+	local lookupTable = (relativeFrame == self) and justificationLookupsForInitialFrame or justificationLookupsForSubsequentFrames;
+	local pointsTable = lookupTable[justification];
+	return pointsTable.point, pointsTable.relativePoint;
+end
+
+function AlertContainerMixin:AddAlertFrame(frame)
+	self:UpdateAnchors();
+	AlertFrame_ShowNewAlert(frame);
+end
+
+-- [[ AlertFrameMixin ]] --
+AlertFrameMixin = {};
+
+function AlertFrameMixin:OnLoad()
+	AlertContainerMixin.OnLoad(self);
+
+	self:RegisterEvent("ACHIEVEMENT_EARNED");
+	self:RegisterEvent("CRITERIA_EARNED");
+	self:RegisterEvent("LFG_COMPLETION_REWARD");
+	self:RegisterEvent("SCENARIO_COMPLETED");
+	self:RegisterEvent("LOOT_ITEM_ROLL_WON");
+	self:RegisterEvent("SHOW_LOOT_TOAST");
+	self:RegisterEvent("SHOW_LOOT_TOAST_UPGRADE");
+	self:RegisterEvent("SHOW_PVP_FACTION_LOOT_TOAST");
+	self:RegisterEvent("SHOW_RATED_PVP_REWARD_TOAST");
+	self:RegisterEvent("PET_BATTLE_CLOSE");
+	self:RegisterEvent("ENTITLEMENT_DELIVERED");
+	self:RegisterEvent("RAF_ENTITLEMENT_DELIVERED");
+	self:RegisterEvent("GARRISON_BUILDING_ACTIVATABLE");
+    self:RegisterEvent("GARRISON_TALENT_COMPLETE");
+	self:RegisterEvent("GARRISON_MISSION_FINISHED");
+	self:RegisterEvent("GARRISON_FOLLOWER_ADDED");
+	self:RegisterEvent("GARRISON_RANDOM_MISSION_ADDED");
+	self:RegisterEvent("NEW_RECIPE_LEARNED");
+	self:RegisterEvent("SHOW_LOOT_TOAST_LEGENDARY_LOOTED");
+	self:RegisterEvent("AZERITE_EMPOWERED_ITEM_LOOTED");
+	self:RegisterEvent("QUEST_TURNED_IN");
+	self:RegisterEvent("QUEST_LOOT_RECEIVED");
+	self:RegisterEvent("NEW_PET_ADDED");
+	self:RegisterEvent("NEW_MOUNT_ADDED");
+	self:RegisterEvent("NEW_TOY_ADDED");
+	self:RegisterEvent("NEW_RUNEFORGE_POWER_ADDED");
+end
+
+function CreateContinuableContainerForLFGRewards()
+	local continuableContainer = ContinuableContainer:Create();
+	local rewardCount = select(10, GetLFGCompletionReward());
+	for i = 1, rewardCount or 0 do
+		local _, _, _, _, _, _, id, objectType = GetLFGCompletionRewardItem(i);
+		if objectType == "item" then
+			local item = Item:CreateFromItemID(id);
+			continuableContainer:AddContinuable(item);
+		end
+	end
+	return continuableContainer;
+end
+
+function AlertFrameMixin:OnEvent(event, ...)
+	AlertContainerMixin.OnEvent(self, event, ...);
+
 	if ( event == "ACHIEVEMENT_EARNED" ) then
-		if (IsKioskModeEnabled()) then
+		if (Kiosk.IsEnabled()) then
 			return;
 		end
 
@@ -285,7 +472,7 @@ function AlertFrameMixin:OnEvent(event, ...)
 
 		AchievementAlertSystem:AddAlert(...);
 	elseif ( event == "CRITERIA_EARNED" ) then
-		if (IsKioskModeEnabled()) then
+		if (Kiosk.IsEnabled()) then
 			return;
 		end
 
@@ -298,10 +485,24 @@ function AlertFrameMixin:OnEvent(event, ...)
 		if ( C_Scenario.IsInScenario() and not C_Scenario.TreatScenarioAsDungeon() ) then
 			local scenarioType = select(10, C_Scenario.GetInfo());
 			if scenarioType ~= LE_SCENARIO_TYPE_LEGION_INVASION then
-				ScenarioAlertSystem:AddAlert(AlertFrame:BuildScenarioRewardData());
+				if (not self:ShouldSupressDungeonOrScenarioAlert()) then 
+					local continuableContainer = CreateContinuableContainerForLFGRewards();
+					if continuableContainer then
+						continuableContainer:ContinueOnLoad(function()
+							ScenarioAlertSystem:AddAlert(self:BuildScenarioRewardData());
+						end);
+					end
+				end
 			end
 		else
-			DungeonCompletionAlertSystem:AddAlert(AlertFrame:BuildLFGRewardData());
+			if (not self:ShouldSupressDungeonOrScenarioAlert()) then 
+				local continuableContainer = CreateContinuableContainerForLFGRewards();
+				if continuableContainer then
+					continuableContainer:ContinueOnLoad(function()
+						DungeonCompletionAlertSystem:AddAlert(self:BuildLFGRewardData());
+					end);
+				end
+			end
 		end
 	elseif ( event == "SCENARIO_COMPLETED" ) then
 		local scenarioName, _, _, _, hasBonusStep, isBonusStepComplete, _, xp, money, scenarioType, areaName = C_Scenario.GetInfo();
@@ -317,14 +518,16 @@ function AlertFrameMixin:OnEvent(event, ...)
 		local itemLink, quantity, rollType, roll, isUpgraded = ...;
 		LootAlertSystem:AddAlert(itemLink, quantity, rollType, roll, nil, nil, nil, nil, nil, isUpgraded);
 	elseif ( event == "SHOW_LOOT_TOAST" ) then
-		local typeIdentifier, itemLink, quantity, specID, sex, isPersonal, lootSource, lessAwesome, isUpgraded = ...;
+		local typeIdentifier, itemLink, quantity, specID, sex, isPersonal, lootSource, lessAwesome, isUpgraded, isCorrupted = ...;
 		if ( typeIdentifier == "item" ) then
-			LootAlertSystem:AddAlert(itemLink, quantity, nil, nil, specID, nil, nil, nil, lessAwesome, isUpgraded, isPersonal);
+			LootAlertSystem:AddAlert(itemLink, quantity, nil, nil, specID, nil, nil, nil, lessAwesome, isUpgraded, isCorrupted);
 		elseif ( typeIdentifier == "money" ) then
 			MoneyWonAlertSystem:AddAlert(quantity);
 		elseif ( isPersonal and (typeIdentifier == "currency") ) then
 			-- only toast currency for personal loot
 			LootAlertSystem:AddAlert(itemLink, quantity, nil, nil, specID, true, false, lootSource);
+		elseif ( typeIdentifier == "honor" ) then
+			HonorAwardedAlertSystem:AddAlert(quantity);
 		end
 	elseif ( event == "SHOW_PVP_FACTION_LOOT_TOAST" ) then
 		local typeIdentifier, itemLink, quantity, specID, sex, isPersonal, lessAwesome = ...;
@@ -349,43 +552,52 @@ function AlertFrameMixin:OnEvent(event, ...)
 		LootUpgradeAlertSystem:AddAlert(itemLink, quantity, specID, baseQuality, nil, nil, lessAwesome);
 	elseif ( event == "PET_BATTLE_CLOSE" ) then
 		AchievementAlertSystem:CheckQueuedAlerts();
-	elseif ( event == "STORE_PRODUCT_DELIVERED" ) then
-		StorePurchaseAlertSystem:AddAlert(...);
+	elseif ( event == "ENTITLEMENT_DELIVERED" ) then
+		EntitlementDeliveredAlertSystem:AddAlert(...);
+	elseif ( event == "RAF_ENTITLEMENT_DELIVERED" ) then
+		RafRewardDeliveredAlertSystem:AddAlert(...);
 	elseif ( event == "GARRISON_BUILDING_ACTIVATABLE" ) then
-		GarrisonBuildingAlertSystem:AddAlert(...);
-		GarrisonLandingPageMinimapButton.MinimapLoopPulseAnim:Play();
-    elseif ( event == "GARRISON_TALENT_COMPLETE") then
-    	local garrisonType = ...;
-    	local talentID = C_Garrison.GetCompleteTalent(garrisonType);
-    	local talent = C_Garrison.GetTalent(talentID);
-        GarrisonTalentAlertSystem:AddAlert(garrisonType, talent);
-	elseif ( event == "GARRISON_MISSION_FINISHED" ) then
-		local validInstance = false;
-		local _, instanceType = GetInstanceInfo();
-		if ( instanceType == "none" or C_Garrison.IsOnGarrisonMap() ) then
-			validInstance = true;
+		local buildingName, garrisonType = ...;
+		if ( garrisonType == C_Garrison.GetLandingPageGarrisonType() ) then
+			GarrisonBuildingAlertSystem:AddAlert(buildingName, garrisonType);
+			GarrisonLandingPageMinimapButton.MinimapLoopPulseAnim:Play();
 		end
-		-- toast only if not in an instance (except for garrison), and mission frame is not shown, and not in combat
-		if ( validInstance and not UnitAffectingCombat("player") ) then
-			local followerTypeID, missionID = ...;
-			local missionFrame = _G[GarrisonFollowerOptions[followerTypeID].missionFrame];
-			if (not missionFrame or not missionFrame:IsShown()) then
-				GarrisonLandingPageMinimapButton.MinimapLoopPulseAnim:Play();
+    elseif ( event == "GARRISON_TALENT_COMPLETE") then
+    	local garrisonType, doAlert = ...;
+    	if ( doAlert ) then
+			local talentID = C_Garrison.GetCompleteTalent(garrisonType);
+			local talent = C_Garrison.GetTalentInfo(talentID);
+	        GarrisonTalentAlertSystem:AddAlert(garrisonType, talent);
+		end
+	elseif ( event == "GARRISON_MISSION_FINISHED" ) then
+		local followerTypeID, missionID = ...;
+		if ( DoesFollowerMatchCurrentGarrisonType(followerTypeID) ) then
+			local validInstance = false;
+			local _, instanceType = GetInstanceInfo();
+			if ( instanceType == "none" or C_Garrison.IsOnGarrisonMap() ) then
+				validInstance = true;
+			end
+			-- toast only if not in an instance (except for garrison), and mission frame is not shown, and not in combat
+			if ( validInstance and not UnitAffectingCombat("player") ) then
+				local missionFrame = _G[GarrisonFollowerOptions[followerTypeID].missionFrame];
+				if (not missionFrame or not missionFrame:IsShown()) then
+					GarrisonLandingPageMinimapButton.MinimapLoopPulseAnim:Play();
 
-				local missionInfo = C_Garrison.GetBasicMissionInfo(missionID);
+					local missionInfo = C_Garrison.GetBasicMissionInfo(missionID);
 
-				if ( followerTypeID == LE_FOLLOWER_TYPE_SHIPYARD_6_2 ) then
-					GarrisonShipMissionAlertSystem:AddAlert(missionInfo);
-				else
-					GarrisonMissionAlertSystem:AddAlert(missionInfo);
+					if ( followerTypeID == Enum.GarrisonFollowerType.FollowerType_6_2 ) then
+						GarrisonShipMissionAlertSystem:AddAlert(missionInfo);
+					else
+						GarrisonMissionAlertSystem:AddAlert(missionInfo);
+					end
 				end
 			end
 		end
 	elseif ( event == "GARRISON_FOLLOWER_ADDED" ) then
-		local followerID, name, class, level, quality, isUpgraded, texPrefix, followerType = ...;
+		local followerID, name, class, level, quality, isUpgraded, textureKit, followerType = ...;
 		local followerInfo = C_Garrison.GetFollowerInfo(followerID);
-		if (followerType == LE_FOLLOWER_TYPE_SHIPYARD_6_2) then
-			GarrisonShipFollowerAlertSystem:AddAlert(followerID, name, class, texPrefix, level, quality, isUpgraded, followerInfo);
+		if (followerType == Enum.GarrisonFollowerType.FollowerType_6_2) then
+			GarrisonShipFollowerAlertSystem:AddAlert(followerID, name, class, textureKit, level, quality, isUpgraded, followerInfo);
 		else
 			GarrisonFollowerAlertSystem:AddAlert(followerID, name, level, quality, isUpgraded, followerInfo);
 		end
@@ -398,113 +610,47 @@ function AlertFrameMixin:OnEvent(event, ...)
 	elseif ( event == "SHOW_LOOT_TOAST_LEGENDARY_LOOTED") then
 		local itemLink = ...;
 		LegendaryItemAlertSystem:AddAlert(itemLink);
+	elseif ( event == "AZERITE_EMPOWERED_ITEM_LOOTED" ) then
+		local itemLink = ...;
+		LootAlertSystem:AddAlert(itemLink, quantity, nil, nil, specID, false);
+	elseif ( event == "NEW_PET_ADDED") then
+		local petID = ...;
+		NewPetAlertSystem:AddAlert(petID);
+	elseif ( event == "NEW_MOUNT_ADDED") then
+		local mountID = ...;
+		NewMountAlertSystem:AddAlert(mountID);
 	elseif ( event == "QUEST_TURNED_IN" ) then
 		local questID = ...;
-		if QuestMapFrame_IsQuestWorldQuest(questID) then
-			WorldQuestCompleteAlertSystem:AddAlert(AlertFrame:BuildQuestData(questID));
+		if QuestUtils_IsQuestWorldQuest(questID) then
+			WorldQuestCompleteAlertSystem:AddAlert(self:BuildQuestData(questID));
 		end
 	elseif ( event == "QUEST_LOOT_RECEIVED" ) then
 		local questID, rewardItemLink = ...;
 		local _, _, _, _, texture = GetItemInfoInstant(rewardItemLink);
-		if QuestMapFrame_IsQuestWorldQuest(questID) then
+		if QuestUtils_IsQuestWorldQuest(questID) then
 			WorldQuestCompleteAlertSystem:AddCoalesceData(questID, rewardItemLink, texture);
 		else
 			-- May be invasion reward
 			InvasionAlertSystem:AddCoalesceData(questID, rewardItemLink, texture);
 		end
+	elseif ( event == "NEW_TOY_ADDED") then
+		local toyID = ...;
+		NewToyAlertSystem:AddAlert(toyID);
+	elseif ( event == "NEW_RUNEFORGE_POWER_ADDED") then
+		local powerID = ...;
+		NewRuneforgePowerAlertSystem:AddAlert(powerID);
 	end
-end
-
-function F(rated)
-	local link = "|cffa335ee|Hitem:143304::::::::110:265:512::2:1812:1678:110:::|h[Fearless Gladiator's Felweave Cloth]|h|r";
-
-	LootAlertSystem:AddAlert(link, 1, nil, nil, GetSpecializationInfo(GetSpecialization()), false, not rated, nil, false, nil, nil, rated);
-end
-
-function AlertFrameMixin:AddJustAnchorFrameSubSystem(anchorFrame)
-	return self:AddAlertFrameSubSystem(CreateJustAnchorAlertSystem(anchorFrame));
-end
-
-function AlertFrameMixin:AddSimpleAlertFrameSubSystem(alertFrameTemplate, setUpFunction, coalesceFunction)
-	local subSystem = self:AddAlertFrameSubSystem(CreateAlertFrameQueueSystem(alertFrameTemplate, setUpFunction, 1, 1, coalesceFunction));
-	subSystem:SetAlwaysReplace(true);
-	return subSystem;
-end
-
-function AlertFrameMixin:AddQueuedAlertFrameSubSystem(alertFrameTemplate, setUpFunction, maxAlerts, maxQueue, coalesceFunction)
-	return self:AddAlertFrameSubSystem(CreateAlertFrameQueueSystem(alertFrameTemplate, setUpFunction, maxAlerts, maxQueue, coalesceFunction));
-end
-
-function AlertFrameMixin:AddAlertFrameSubSystem(alertFrameSubSystem)
-	self.alertFrameSubSystems[#self.alertFrameSubSystems + 1] = alertFrameSubSystem;
-
-	local STARTING_PRIORITY = 1000;
-	self:SetSubSustemAnchorPriority(alertFrameSubSystem, STARTING_PRIORITY + #self.alertFrameSubSystems * 10);
-	return alertFrameSubSystem;
-end
-
-function AlertFrameMixin:SetSubSustemAnchorPriority(alertFrameSubSystem, priority)
-	alertFrameSubSystem.anchorPriority = priority;
-	self.anchorPrioritiesDirty = true;
-end
-
-do
-	local function AnchorPriorityComparator(left, right)
-		return left.anchorPriority < right.anchorPriority;
-	end
-	function AlertFrameMixin:CleanAnchorPriorities()
-		if self.anchorPrioritiesDirty then
-			self.anchorPrioritiesDirty = nil;
-			table.sort(self.alertFrameSubSystems, AnchorPriorityComparator);
-		end
-	end
-end
-
-function AlertFrameMixin:UpdateAnchors()
-	self:CleanAnchorPriorities();
-
-	local relativeFrame = self;
-	for i, alertFrameSubSystem in ipairs(self.alertFrameSubSystems) do
-		relativeFrame = alertFrameSubSystem:AdjustAnchors(relativeFrame);
-	end
-end
-
-function AlertFrameMixin:AddAlertFrame(frame)
-	frame:Show();
-	frame.animIn:Play();
-	if frame.glow then
-		if frame.glow.suppressGlow then
-			frame.glow:Hide();
-		else
-			frame.glow:Show();
-			frame.glow.animIn:Play();
-		end
-	end
-
-	if frame.shine then
-		frame.shine:Show();
-		frame.shine.animIn:Play();
-	end
-	frame.waitAndAnimOut:Stop();	--Just in case it's already animating out, but we want to reinstate it.
-	if frame:IsMouseOver() then
-		frame.waitAndAnimOut.animOut:SetStartDelay(1);
-	else
-		frame.waitAndAnimOut.animOut:SetStartDelay(4.05);
-		frame.waitAndAnimOut:Play();
-	end
-
-	self:UpdateAnchors();
 end
 
 -- [[ AlertFrame Utility functions ]] --
 function AlertFrameMixin:BuildLFGRewardData()
 	local rewardData = {};
 
-	local name, typeID, subtypeID, textureFilename, moneyBase, moneyVar, experienceBase, experienceVar, numStrangers, numRewards = GetLFGCompletionReward();
+	local name, typeID, subtypeID, iconTextureFile, moneyBase, moneyVar, experienceBase, experienceVar, numStrangers, numRewards = GetLFGCompletionReward();
 
 	rewardData.name = name;
 	rewardData.subtypeID = subtypeID;
-	rewardData.textureFilename = textureFilename;
+	rewardData.iconTextureFile = iconTextureFile;
 	rewardData.moneyBase = moneyBase;
 	rewardData.moneyVar = moneyVar;
 	rewardData.experienceBase = experienceBase;
@@ -540,7 +686,7 @@ function AlertFrameMixin:BuildScenarioRewardData()
 end
 
 function AlertFrameMixin:BuildQuestData(questID)
-	local _, _, _, taskName = GetTaskInfo(questID);
+	local taskName, factionID, capped, displayAsObjective = C_TaskQuest.GetQuestInfoByQuestID(questID);
 
 	local questData =
 	{
@@ -549,6 +695,7 @@ function AlertFrameMixin:BuildQuestData(questID)
 		taskName = taskName,
 		money = GetQuestLogRewardMoney(questID),
 		xp = GetQuestLogRewardXP(questID),
+		displayAsObjective = displayAsObjective,
 	};
 
 	local currencyRewardCount = GetNumQuestLogRewardCurrencies(questID);
@@ -565,22 +712,75 @@ function AlertFrameMixin:BuildQuestData(questID)
 	return questData;
 end
 
+function AlertFrameMixin:ShouldSupressDungeonOrScenarioAlert()
+	if	(IslandsPartyPoseFrame) then 
+		if (IslandsPartyPoseFrame:IsVisible()) then 
+			return true; 
+		end
+	elseif (WarfrontsPartyPoseFrame) then 
+		if(WarfrontsPartyPoseFrame:IsVisible()) then 
+			return true;
+		end
+	end
+	return false;
+end
+
 -- [[ AlertFrameTemplate functions ]] --
-function AlertFrameTemplate_OnLoad(self)
-	self:RegisterForClicks("LeftButtonUp", "RightButtonUp");
-end
-
-function AlertFrameTemplate_OnHide(self)
-	AlertFrame:UpdateAnchors();
-end
-
-function AlertFrame_StopOutAnimation(frame)
+function AlertFrame_PauseOutAnimation(frame)
 	frame.waitAndAnimOut:Stop();
-	frame.waitAndAnimOut.animOut:SetStartDelay(1);
+end
+
+function AlertFrame_PlayOutAnimation(frame, optionalDelay)
+	frame.waitAndAnimOut.animOut:SetStartDelay(optionalDelay or 1);
+	frame.waitAndAnimOut:Play();
 end
 
 function AlertFrame_ResumeOutAnimation(frame)
-	frame.waitAndAnimOut:Play();
+	if frame:ManagesOwnOutroAnimation() then
+		-- TODO: If the mouse was over the alert when it was initially shown, and then leaves (by accident or on purpose)
+		-- that the initial delay of 4 seconds will be reduced to 1 here...this was previous behavior, but it might be
+		-- desirable to track how long the mouse was over the frame and to adjust the initial delay accordingly.
+		AlertFrame_PlayOutAnimation(frame, 1);
+	end
+end
+
+function AlertFrame_PlayIntroAnimation(frame)
+	frame.animIn:Play();
+
+	if frame.glow then
+		if frame.glow.suppressGlow then
+			frame.glow:Hide();
+		else
+			frame.glow:Show();
+			frame.glow.animIn:Play();
+		end
+	end
+
+	if frame.shine then
+		frame.shine:Show();
+		frame.shine.animIn:Play();
+	end
+end
+
+function AlertFrame_PlayOutroAnimation(frame)
+	AlertFrame_PauseOutAnimation(frame);
+
+	if not frame:IsMouseOver() then
+		AlertFrame_PlayOutAnimation(frame, frame.duration or 4);
+	end
+end
+
+function AlertFrame_PlayAnimations(frame)
+	AlertFrame_PlayIntroAnimation(frame);
+
+	if frame:ManagesOwnOutroAnimation() then
+		AlertFrame_PlayOutroAnimation(frame);
+	end
+end
+
+function AlertFrame_ShowNewAlert(frame)
+	frame:Show();
+	AlertFrame_PlayAnimations(frame);
 end
 
 function AlertFrame_OnClick(self, button, down)

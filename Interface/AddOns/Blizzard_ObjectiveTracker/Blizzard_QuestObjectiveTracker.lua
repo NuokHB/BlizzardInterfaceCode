@@ -1,86 +1,104 @@
+QUEST_TRACKER_MODULE = ObjectiveTracker_GetModuleInfoTable("QUEST_TRACKER_MODULE");
+QUEST_TRACKER_MODULE.updateReasonModule = 	OBJECTIVE_TRACKER_UPDATE_MODULE_QUEST +
+											OBJECTIVE_TRACKER_UPDATE_MODULE_AUTO_QUEST_POPUP;
 
-QUEST_TRACKER_MODULE = ObjectiveTracker_GetModuleInfoTable();
-QUEST_TRACKER_MODULE.updateReasonModule = OBJECTIVE_TRACKER_UPDATE_MODULE_QUEST;
-QUEST_TRACKER_MODULE.updateReasonEvents = OBJECTIVE_TRACKER_UPDATE_QUEST + OBJECTIVE_TRACKER_UPDATE_QUEST_ADDED;
-QUEST_TRACKER_MODULE.usedBlocks = { };
+QUEST_TRACKER_MODULE.updateReasonEvents = 	OBJECTIVE_TRACKER_UPDATE_QUEST +
+											OBJECTIVE_TRACKER_UPDATE_QUEST_ADDED +
+											OBJECTIVE_TRACKER_UPDATE_SUPER_TRACK_CHANGED;
+
+local QUEST_TRACKER_MODULE_BLOCK_TEMPLATE = "ObjectiveTrackerBlockTemplate";
+
+QUEST_TRACKER_MODULE:AddButtonOffsets(QUEST_TRACKER_MODULE_BLOCK_TEMPLATE, {
+	groupFinder = { 7, 4 },
+	useItem = { 3, 1 },
+});
+
+QUEST_TRACKER_MODULE:AddPaddingBetweenButtons(QUEST_TRACKER_MODULE_BLOCK_TEMPLATE, 2);
+
 -- because this header is shared, on finishing its anim it has to update all the modules that use it
 QUEST_TRACKER_MODULE:SetHeader(ObjectiveTrackerFrame.BlocksFrame.QuestHeader, TRACKER_HEADER_QUESTS, OBJECTIVE_TRACKER_UPDATE_QUEST_ADDED);
 
 function QUEST_TRACKER_MODULE:OnFreeBlock(block)
-	local itemButton = block.itemButton;
-	if ( itemButton ) then
-		QuestObjectiveItem_ReleaseButton(itemButton);
-		block.itemButton = nil;
+	if block.blockTemplate == QUEST_TRACKER_MODULE_BLOCK_TEMPLATE then
+		QuestObjectiveReleaseBlockButton_Item(block);
+		QuestObjectiveReleaseBlockButton_FindGroup(block);
+
+		block.timerLine	= nil;
+	else
+		AutoQuestPopupTracker_OnFreeBlock(block);
 	end
-	block.timerLine	= nil;
-	block.questCompleted = nil;
 end
 
 function QUEST_TRACKER_MODULE:OnFreeTypedLine(line)
 	line.block = nil;
-	line.Check:Hide();
 	if ( line.state ) then
+		line.Check:Hide();
 		line.state = nil;
 		line.Glow.Anim:Stop();
+		line.Glow:SetAlpha(0);
 		line.Sheen.Anim:Stop();
+		line.Sheen:SetAlpha(0);
 		line.CheckFlash.Anim:Stop();
+		line.CheckFlash:SetAlpha(0);
 		line.FadeOutAnim:Stop();
-	end	
+	end
 end
 
-function QUEST_TRACKER_MODULE:SetBlockHeader(block, text, questLogIndex, isQuestComplete)
-	-- check if there's an item
-	local link, item, charges, showItemWhenComplete = GetQuestLogSpecialItemInfo(questLogIndex);
-	local itemButton = block.itemButton;	
-	if ( item and ( not isQuestComplete or showItemWhenComplete ) ) then
-		-- if the block doesn't already have an item, get one
-		if ( not itemButton ) then
-			itemButton = QuestObjectiveItem_AcquireButton(block);
-			block.itemButton = itemButton;
-			itemButton:SetPoint("TOPRIGHT", block, -2, 1);
-			itemButton:Show();
-		end
+function QUEST_TRACKER_MODULE:SetBlockHeader(block, text, questLogIndex, isQuestComplete, questID)
+	QuestObjective_SetupHeader(block);
 
-		QuestObjectiveItem_Initialize(itemButton, questLogIndex);
-		
-		block.lineWidth = OBJECTIVE_TRACKER_TEXT_WIDTH - OBJECTIVE_TRACKER_ITEM_WIDTH;
-		block.HeaderText:SetWidth(block.lineWidth);		
-	else
-		if ( itemButton ) then
-			QuestObjectiveItem_ReleaseButton(itemButton);
-			block.itemButton = nil;
-		end
+	local hasGroupFinder = QuestObjectiveSetupBlockButton_FindGroup(block, questID);
+	local hasItem = QuestObjectiveSetupBlockButton_Item(block, questLogIndex, isQuestComplete);
+
+	-- Special case for previous behavior...if there are no buttons then use default line width from module
+	if not (hasItem or hasGroupFinder) then
 		block.lineWidth = nil;
-		block.HeaderText:SetWidth(OBJECTIVE_TRACKER_TEXT_WIDTH);
 	end
+
 	-- set the text
-	local height = QUEST_TRACKER_MODULE:SetStringText(block.HeaderText, text, nil, OBJECTIVE_TRACKER_COLOR["Header"]);
+	block.HeaderText:SetWidth(block.lineWidth or OBJECTIVE_TRACKER_TEXT_WIDTH);
+	local height = self:SetStringText(block.HeaderText, text, nil, OBJECTIVE_TRACKER_COLOR["Header"]);
 	block.height = height;
 end
 
 function QUEST_TRACKER_MODULE:OnBlockHeaderClick(block, mouseButton)
-	local questLogIndex = GetQuestLogIndexByID(block.id);
-	if ( IsModifiedClick("CHATLINK") and ChatEdit_GetActiveWindow() ) then
-		local questLink = GetQuestLink(questLogIndex);
-		if ( questLink ) then
-			ChatEdit_InsertLink(questLink);
-		end
-	elseif ( mouseButton ~= "RightButton" ) then
+	if ( ChatEdit_TryInsertQuestLinkForQuestID(block.id) ) then
+		return;
+	end
+
+	if ( mouseButton ~= "RightButton" ) then
 		CloseDropDownMenus();
 		if ( IsModifiedClick("QUESTWATCHTOGGLE") ) then
 			QuestObjectiveTracker_UntrackQuest(nil, block.id);
 		else
-			if ( IsQuestComplete(block.id) and GetQuestLogIsAutoComplete(questLogIndex) ) then
+			local quest = QuestCache:Get(block.id);
+			if quest.isAutoComplete and quest:IsComplete() then
 				AutoQuestPopupTracker_RemovePopUp(block.id);
-				ShowQuestComplete(questLogIndex);
+				ShowQuestComplete(block.id);
 			else
-				QuestLogPopupDetailFrame_Show(questLogIndex);
+				QuestMapFrame_OpenToQuestDetails(block.id);
 			end
 		end
 		return;
 	else
 		ObjectiveTracker_ToggleDropDown(block, QuestObjectiveTracker_OnOpenDropDown);
 	end
+end
+
+function QUEST_TRACKER_MODULE:OnBlockHeaderEnter(block)
+	DEFAULT_OBJECTIVE_TRACKER_MODULE:OnBlockHeaderEnter(block)
+
+	if IsInGroup() then
+		GameTooltip:ClearAllPoints();
+		GameTooltip:SetPoint("TOPRIGHT", block, "TOPLEFT", 0, 0);
+		GameTooltip:SetOwner(block, "ANCHOR_PRESERVE");
+		GameTooltip:SetQuestPartyProgress(block.id);
+	end
+end
+
+function QUEST_TRACKER_MODULE:OnBlockHeaderLeave(block)
+	DEFAULT_OBJECTIVE_TRACKER_MODULE:OnBlockHeaderLeave(block)
+	GameTooltip:Hide();
 end
 
 local LINE_TYPE_ANIM = { template = "QuestObjectiveAnimLineTemplate", freeLines = { } };
@@ -106,7 +124,7 @@ end
 
 function QuestObjectiveTracker_FinishFadeOutAnim(line)
 	local block = line.block;
-	QUEST_TRACKER_MODULE:FreeLine(block, line);
+	block.module:FreeLine(block, line);
 	for _, otherLine in pairs(block.lines) do
 		if ( otherLine.state == "FADING" ) then
 			-- some other line is still fading
@@ -122,10 +140,9 @@ end
 
 function QuestObjectiveTracker_OnOpenDropDown(self)
 	local block = self.activeFrame;
-	local questLogIndex = GetQuestLogIndexByID(block.id);
 
 	local info = UIDropDownMenu_CreateInfo();
-	info.text = GetQuestLogTitle(questLogIndex);
+	info.text = C_QuestLog.GetTitleForQuestID(block.id);
 	info.isTitle = 1;
 	info.notCheckable = 1;
 	UIDropDownMenu_AddButton(info, UIDROPDOWN_MENU_LEVEL);
@@ -146,7 +163,7 @@ function QuestObjectiveTracker_OnOpenDropDown(self)
 	info.checked = false;
 	UIDropDownMenu_AddButton(info, UIDROPDOWN_MENU_LEVEL);
 
-	if ( GetQuestLogPushable(questLogIndex) and IsInGroup() ) then
+	if ( C_QuestLog.IsPushableQuest(block.id) and IsInGroup() ) then
 		info.text = SHARE_QUEST;
 		info.func = QuestObjectiveTracker_ShareQuest;
 		info.arg1 = block.id;
@@ -163,15 +180,14 @@ function QuestObjectiveTracker_OnOpenDropDown(self)
 end
 
 function QuestObjectiveTracker_OpenQuestDetails(dropDownButton, questID)
-	local questLogIndex = GetQuestLogIndexByID(questID);
+	local questLogIndex = C_QuestLog.GetLogIndexForQuestID(questID);
 	QuestLogPopupDetailFrame_Show(questLogIndex);
 end
 
 function QuestObjectiveTracker_UntrackQuest(dropDownButton, questID)
-	local superTrackedQuestID = GetSuperTrackedQuestID();
-	local questLogIndex = GetQuestLogIndexByID(questID);
-	RemoveQuestWatch(questLogIndex);
-	if ( questID == superTrackedQuestID ) then
+	local superTrackedQuestID = C_SuperTrack.GetSuperTrackedQuestID();
+	C_QuestLog.RemoveQuestWatch(questID);
+	if questID == superTrackedQuestID then
 		QuestSuperTracking_OnQuestUntracked();
 	end
 	ObjectiveTracker_Update(OBJECTIVE_TRACKER_UPDATE_MODULE_QUEST);
@@ -182,7 +198,7 @@ function QuestObjectiveTracker_OpenQuestMap(dropDownButton, questID)
 end
 
 function QuestObjectiveTracker_ShareQuest(dropDownButton, questID)
-	local questLogIndex = GetQuestLogIndexByID(questID);
+	local questLogIndex = C_QuestLog.GetLogIndexForQuestID(questID);
 	QuestLogPushQuest(questLogIndex);
 end
 
@@ -190,52 +206,83 @@ end
 -- ***** UPDATE FUNCTIONS
 -- *****************************************************************************************************
 
-function QuestObjectiveTracker_UpdatePOIs()
-	QuestPOI_ResetUsage(ObjectiveTrackerFrame.BlocksFrame);
+local function CompareQuestWatchInfos(info1, info2)
+	local quest1, quest2 = info1.quest, info2.quest;
 
-	local showPOIs = GetCVarBool("questPOI");
-	if ( not showPOIs ) then
-		QuestPOI_HideUnusedButtons(ObjectiveTrackerFrame.BlocksFrame);
-		return;
+	if quest1:IsCalling() ~= quest2:IsCalling() then
+		return quest1:IsCalling();
 	end
 
-	local playerMoney = GetMoney();
-	local numPOINumeric = 0;
-	for i = 1, GetNumQuestWatches() do
-		local questID, title, questLogIndex, numObjectives, requiredMoney, isComplete, startEvent, isAutoComplete, failureTime, timeElapsed, questType, isTask, isBounty, isStory, isOnMap, hasLocalPOI = GetQuestWatchInfo(i);
-		if ( questID ) then
-			-- see if we already have a block for this quest
-			local block = QUEST_TRACKER_MODULE:GetExistingBlock(questID);
-			if ( block ) then
-				if ( isComplete and isComplete < 0 ) then
-					isComplete = false;
-				elseif ( numObjectives == 0 and playerMoney >= requiredMoney and not startEvent ) then
-					isComplete = true;
-				end
-				local poiButton;			
-				if ( hasLocalPOI ) then
-					if ( isComplete ) then
-						poiButton = QuestPOI_GetButton(ObjectiveTrackerFrame.BlocksFrame, questID, "normal", nil);
-					else
-						numPOINumeric = numPOINumeric + 1;
-						poiButton = QuestPOI_GetButton(ObjectiveTrackerFrame.BlocksFrame, questID, "numeric", numPOINumeric);
-					end
-				elseif ( isComplete ) then
-					poiButton = QuestPOI_GetButton(ObjectiveTrackerFrame.BlocksFrame, questID, "remote", nil);
-				end
-				if ( poiButton ) then
-					poiButton:SetPoint("TOPRIGHT", block.HeaderText, "TOPLEFT", -6, 2);
-				end
+	if quest1.overridesSortOrder ~= quest2.overridesSortOrder then
+		return quest1.overridesSortOrder;
+	end
+
+	return info1.index < info2.index;
+end
+
+function QUEST_TRACKER_MODULE:BuildQuestWatchInfos()
+	local infos = {};
+
+	for i = 1, C_QuestLog.GetNumQuestWatches() do
+		local questID = C_QuestLog.GetQuestIDForQuestWatchIndex(i);
+		if questID then
+			local quest = QuestCache:Get(questID);
+			if self:ShouldDisplayQuest(quest) then
+				table.insert(infos, { quest = quest, index = i });
 			end
 		end
 	end
-	QuestPOI_SelectButtonByQuestID(ObjectiveTrackerFrame.BlocksFrame, GetSuperTrackedQuestID());
-	QuestPOI_HideUnusedButtons(ObjectiveTrackerFrame.BlocksFrame);
+
+	table.sort(infos, CompareQuestWatchInfos);
+	return infos;
 end
 
-function QuestObjectiveTracker_DoQuestObjectives(block, numObjectives, questCompleted, questSequenced, existingBlock)
+function QUEST_TRACKER_MODULE:EnumQuestWatchData(func)
+	local infos = self:BuildQuestWatchInfos();
+	for index, questWatchInfo in ipairs(infos) do
+		if func(self, questWatchInfo.quest) then
+			return;
+		end
+	end
+end
+
+function QUEST_TRACKER_MODULE:UpdatePOISingle(quest)
+	local questID = quest:GetID();
+	local isComplete = quest:IsComplete();
+	local isOnMap, hasLocalPOI = quest:IsOnMap();
+
+	local block = self:GetExistingBlock(questID);
+	if block then
+		local shouldShowWaypoint = (questID == C_SuperTrack.GetSuperTrackedQuestID()) or (questID == QuestMapFrame_GetFocusedQuestID());
+		local poiButton;
+
+		if isComplete then
+			poiButton = QuestPOI_GetButton(ObjectiveTrackerFrame.BlocksFrame, questID, "normal", nil);
+		elseif  hasLocalPOI or (shouldShowWaypoint and C_QuestLog.GetNextWaypoint(questID) ~= nil) then
+			self.numPOINumeric = self.numPOINumeric + 1;
+			poiButton = QuestPOI_GetButton(ObjectiveTrackerFrame.BlocksFrame, questID, "numeric", self.numPOINumeric);
+		end
+
+		if poiButton then
+			poiButton:SetPoint("TOPRIGHT", block.HeaderText, "TOPLEFT", -6, 2);
+		end
+	end
+end
+
+function QUEST_TRACKER_MODULE:UpdatePOIs(numPOINumeric)
+	self.numPOINumeric = numPOINumeric;
+	self:EnumQuestWatchData(self.UpdatePOISingle);
+
+	QuestPOI_SelectButtonByQuestID(ObjectiveTrackerFrame.BlocksFrame, C_SuperTrack.GetSuperTrackedQuestID());
+	QuestPOI_HideUnusedButtons(ObjectiveTrackerFrame.BlocksFrame);
+
+	return self.numPOINumeric;
+end
+
+function QuestObjectiveTracker_DoQuestObjectives(self, block, questCompleted, questSequenced, existingBlock, useFullHeight)
 	local objectiveCompleting = false;
-	local questLogIndex = GetQuestLogIndexByID(block.id);
+	local questLogIndex = C_QuestLog.GetLogIndexForQuestID(block.id);
+	local numObjectives = GetNumQuestLeaderBoards(questLogIndex);
 	for objectiveIndex = 1, numObjectives do
 		local text, objectiveType, finished = GetQuestLogLeaderBoard(objectiveIndex, questLogIndex);
 		if ( text ) then
@@ -243,22 +290,22 @@ function QuestObjectiveTracker_DoQuestObjectives(block, numObjectives, questComp
 			if ( questCompleted ) then
 				-- only process existing lines
 				if ( line ) then
-					line = QUEST_TRACKER_MODULE:AddObjective(block, objectiveIndex, text, LINE_TYPE_ANIM, nil, OBJECTIVE_DASH_STYLE_HIDE, OBJECTIVE_TRACKER_COLOR["Complete"]);
+					line = self:AddObjective(block, objectiveIndex, text, LINE_TYPE_ANIM, useFullHeight, OBJECTIVE_DASH_STYLE_HIDE, OBJECTIVE_TRACKER_COLOR["Complete"]);
 					-- don't do anything else if a line is either COMPLETING or FADING, the anims' OnFinished will continue the process
 					if ( not line.state or line.state == "PRESENT" ) then
 						-- this objective wasn't marked finished
 						line.block = block;
 						line.Check:Show();
-						line.Sheen.Anim:Play();				
+						line.Sheen.Anim:Play();
 						line.Glow.Anim:Play();
 						line.CheckFlash.Anim:Play();
 						line.state = "COMPLETING";
 					end
 				end
 			else
-				if ( finished ) then		
+				if ( finished ) then
 					if ( line ) then
-						line = QUEST_TRACKER_MODULE:AddObjective(block, objectiveIndex, text, LINE_TYPE_ANIM, nil, OBJECTIVE_DASH_STYLE_HIDE, OBJECTIVE_TRACKER_COLOR["Complete"]);
+						line = self:AddObjective(block, objectiveIndex, text, LINE_TYPE_ANIM, useFullHeight, OBJECTIVE_DASH_STYLE_HIDE, OBJECTIVE_TRACKER_COLOR["Complete"]);
 						if ( not line.state or line.state == "PRESENT" ) then
 							-- complete this
 							line.block = block;
@@ -271,7 +318,7 @@ function QuestObjectiveTracker_DoQuestObjectives(block, numObjectives, questComp
 					else
 						-- didn't have a line, just show completed if not sequenced
 						if ( not questSequenced ) then
-							line = QUEST_TRACKER_MODULE:AddObjective(block, objectiveIndex, text, LINE_TYPE_ANIM, nil, OBJECTIVE_DASH_STYLE_HIDE, OBJECTIVE_TRACKER_COLOR["Complete"]);
+							line = self:AddObjective(block, objectiveIndex, text, LINE_TYPE_ANIM, useFullHeight, OBJECTIVE_DASH_STYLE_HIDE, OBJECTIVE_TRACKER_COLOR["Complete"]);
 							line.Check:Show();
 							line.state = "COMPLETED";
 						end
@@ -280,15 +327,18 @@ function QuestObjectiveTracker_DoQuestObjectives(block, numObjectives, questComp
 					if ( not questSequenced or not objectiveCompleting ) then
 						-- new objectives need to animate in
 						if ( questSequenced and existingBlock and not line ) then
-							line = QUEST_TRACKER_MODULE:AddObjective(block, objectiveIndex, text, LINE_TYPE_ANIM);
+							line = self:AddObjective(block, objectiveIndex, text, LINE_TYPE_ANIM, useFullHeight);
 							line.Sheen.Anim:Play();
 							line.Glow.Anim:Play();
 							line.state = "ADDING";
-							PlaySound("UI_QuestRollingForward_01");
-						else
-							QUEST_TRACKER_MODULE:AddObjective(block, objectiveIndex, text);
+							PlaySound(SOUNDKIT.UI_QUEST_ROLLING_FORWARD_01);
 							if ( objectiveType == "progressbar" ) then
-								QUEST_TRACKER_MODULE:AddProgressBar(block, block.currentLine, block.id, finished);
+								self:AddProgressBar(block, line, block.id, finished);
+							end
+						else
+							self:AddObjective(block, objectiveIndex, text, nil, useFullHeight);
+							if ( objectiveType == "progressbar" ) then
+								self:AddProgressBar(block, block.currentLine, block.id, finished);
 							end
 						end
 					end
@@ -300,7 +350,7 @@ function QuestObjectiveTracker_DoQuestObjectives(block, numObjectives, questComp
 					objectiveCompleting = true;
 				end
 			end
-			
+
 		end
 	end
 	if ( questCompleted and not objectiveCompleting ) then
@@ -314,134 +364,123 @@ function QuestObjectiveTracker_DoQuestObjectives(block, numObjectives, questComp
 	return objectiveCompleting;
 end
 
-function QUEST_TRACKER_MODULE:Update()
+function QUEST_TRACKER_MODULE:UpdateSingle(quest)
+	local questID = quest:GetID();
+	local isComplete = quest:IsComplete();
+	local isSuperTracked = (questID == C_SuperTrack.GetSuperTrackedQuestID());
+	local useFullHeight = true; -- Always use full height of the block for the quest tracker.
+	local shouldShowWaypoint = isSuperTracked or (questID == QuestMapFrame_GetFocusedQuestID());
+	local isSequenced = IsQuestSequenced(questID);
+	local existingBlock = self:GetExistingBlock(questID);
+	local block = self:GetBlock(questID);
+	self:SetBlockHeader(block, quest.title, quest:GetQuestLogIndex(), isComplete, questID);
 
-	QUEST_TRACKER_MODULE:BeginLayout();
-	QUEST_TRACKER_MODULE.lastBlock = nil;
-			
-	local numPOINumeric = 0;
-	QuestPOI_ResetUsage(ObjectiveTrackerFrame.BlocksFrame);
+	-- completion state
+	local questFailed = C_QuestLog.IsFailed(questID);
+
+	if quest.requiredMoney > 0 then
+		self.watchMoney = true;
+	end
+
+	if ( isComplete ) then
+		-- don't display completion state yet if we're animating an objective completing
+		local objectiveCompleting = QuestObjectiveTracker_DoQuestObjectives(self, block, isComplete, isSequenced, existingBlock, useFullHeight);
+		if ( not objectiveCompleting ) then
+			if ( quest.isAutoComplete ) then
+				self:AddObjective(block, "QuestComplete", QUEST_WATCH_QUEST_COMPLETE);
+				self:AddObjective(block, "ClickComplete", QUEST_WATCH_CLICK_TO_COMPLETE);
+			else
+				local completionText = GetQuestLogCompletionText(quest:GetQuestLogIndex());
+				if ( completionText ) then
+					if ( shouldShowWaypoint ) then
+						local waypointText = C_QuestLog.GetNextWaypointText(questID);
+						if ( waypointText ~= nil ) then
+							self:AddObjective(block, "Waypoint", WAYPOINT_OBJECTIVE_FORMAT_OPTIONAL:format(waypointText), nil, useFullHeight);
+						end
+					end
+
+					local forceCompletedToUseFullHeight = true;
+					self:AddObjective(block, "QuestComplete", completionText, nil, forceCompletedToUseFullHeight, OBJECTIVE_DASH_STYLE_HIDE);
+				else
+					-- If there isn't completion text, always prefer waypoint to "Ready for turn-in".
+					local waypointText = C_QuestLog.GetNextWaypointText(questID);
+					if ( waypointText ~= nil ) then
+						self:AddObjective(block, "Waypoint", waypointText, nil, useFullHeight);
+					else
+						self:AddObjective(block, "QuestComplete", QUEST_WATCH_QUEST_READY, nil, useFullHeight, OBJECTIVE_DASH_STYLE_HIDE, OBJECTIVE_TRACKER_COLOR["Complete"]);
+					end
+				end
+			end
+		end
+	elseif ( questFailed ) then
+		self:AddObjective(block, "Failed", FAILED, nil, useFullHeight, OBJECTIVE_DASH_STYLE_HIDE, OBJECTIVE_TRACKER_COLOR["Failed"]);
+	else
+		if ( shouldShowWaypoint ) then
+			local waypointText = C_QuestLog.GetNextWaypointText(questID);
+			if ( waypointText ~= nil ) then
+				self:AddObjective(block, "Waypoint", WAYPOINT_OBJECTIVE_FORMAT_OPTIONAL:format(waypointText), nil, useFullHeight);
+			end
+		end
+
+		QuestObjectiveTracker_DoQuestObjectives(self, block, isComplete, isSequenced, existingBlock, useFullHeight);
+		if ( quest.requiredMoney > self.playerMoney ) then
+			local text = GetMoneyString(self.playerMoney).." / "..GetMoneyString(quest.requiredMoney);
+			self:AddObjective(block, "Money", text, nil, useFullHeight);
+		end
+
+		-- timer bar
+		local timeTotal, timeElapsed = C_QuestLog.GetTimeAllowed(questID);
+		if timeTotal and block.currentLine then
+			local currentLine = block.currentLine;
+			if timeElapsed and timeElapsed <= timeTotal then
+				-- if a timer was attached to another line, release it
+				if block.timerLine and block.timerLine ~= currentLine then
+					self:FreeTimerBar(block, block.timerLine);
+				end
+				self:AddTimerBar(block, currentLine, timeTotal, GetTime() - timeElapsed);
+				block.timerLine = currentLine;
+			elseif block.timerLine then
+				self:FreeTimerBar(block, block.timerLine);
+			end
+		end
+	end
+	block:SetHeight(block.height);
+
+	if ObjectiveTracker_AddBlock(block) then
+		block:Show();
+		self:FreeUnusedLines(block);
+	else
+		block.used = false;
+		return true; -- Can't add the block, we're done enumerating quests
+	end
+end
+
+function QUEST_TRACKER_MODULE:Update()
+	self:BeginLayout();
+
+	AutoQuestPopupTracker_Update(self);
 
 	local _, instanceType = IsInInstance();
 	if ( instanceType == "arena" ) then
 		-- no quests in arena
-		QuestPOI_HideUnusedButtons(ObjectiveTrackerFrame.BlocksFrame);
-		QUEST_TRACKER_MODULE:EndLayout();
+		self:EndLayout();
 		return;
 	end
-	
-	local playerMoney = GetMoney();
-	local watchMoney = false;
-	local inScenario = C_Scenario.IsInScenario();
-	local showPOIs = GetCVarBool("questPOI");
 
-	for i = 1, GetNumQuestWatches() do
-		local questID, title, questLogIndex, numObjectives, requiredMoney, isComplete, startEvent, isAutoComplete, failureTime, timeElapsed, questType, isTask, isBounty, isStory, isOnMap, hasLocalPOI = GetQuestWatchInfo(i);
-		if ( not questID ) then
-			break;
-		end
+	self.playerMoney = GetMoney();
+	self.watchMoney = false;
 
-		-- check filters
-		local showQuest = true;
-		if ( isTask or ( isBounty and not IsQuestComplete(questID) ) ) then
-			showQuest = false;
-		end
+	self:EnumQuestWatchData(self.UpdateSingle);
 
-		if ( showQuest ) then
-			local isSequenced = IsQuestSequenced(questID);
-			local existingBlock = QUEST_TRACKER_MODULE:GetExistingBlock(questID);
-			local block = QUEST_TRACKER_MODULE:GetBlock(questID);
-			QUEST_TRACKER_MODULE:SetBlockHeader(block, title, questLogIndex, isComplete);
+	ObjectiveTracker_WatchMoney(self.watchMoney, OBJECTIVE_TRACKER_UPDATE_MODULE_QUEST);
+	QuestSuperTracking_CheckSelection();
+	self:EndLayout();
+end
 
-			-- completion state
-			local questFailed = false;
-			if ( isComplete and isComplete < 0 ) then
-				isComplete = false;
-				questFailed = true;
-			elseif ( numObjectives == 0 and playerMoney >= requiredMoney and not startEvent ) then
-				isComplete = true;
-			end
-			
-			if ( requiredMoney > 0 ) then
-				watchMoney = true;
-			end
-
-			if ( isComplete ) then
-				-- don't display completion state yet if we're animating an objective completing
-				local objectiveCompleting = QuestObjectiveTracker_DoQuestObjectives(block, numObjectives, true, isSequenced, existingBlock);
-				if ( not objectiveCompleting ) then
-					if ( isAutoComplete ) then
-						QUEST_TRACKER_MODULE:AddObjective(block, "QuestComplete", QUEST_WATCH_QUEST_COMPLETE);
-						QUEST_TRACKER_MODULE:AddObjective(block, "ClickComplete", QUEST_WATCH_CLICK_TO_COMPLETE);
-					else
-						local completionText = GetQuestLogCompletionText(questLogIndex);
-						if ( completionText ) then
-							QUEST_TRACKER_MODULE:AddObjective(block, "QuestComplete", completionText, nil, OBJECTIVE_DASH_STYLE_HIDE);
-						else
-							QUEST_TRACKER_MODULE:AddObjective(block, "QuestComplete", QUEST_WATCH_QUEST_READY, nil, nil, OBJECTIVE_DASH_STYLE_HIDE, OBJECTIVE_TRACKER_COLOR["Complete"]);
-						end
-					end
-				end
-			elseif ( questFailed ) then
-				QUEST_TRACKER_MODULE:AddObjective(block, "Failed", FAILED, nil, nil, OBJECTIVE_DASH_STYLE_HIDE, OBJECTIVE_TRACKER_COLOR["Failed"]);
-			else
-				QuestObjectiveTracker_DoQuestObjectives(block, numObjectives, false, isSequenced, existingBlock);
-				if ( requiredMoney > playerMoney ) then
-					local text = GetMoneyString(playerMoney).." / "..GetMoneyString(requiredMoney);
-					QUEST_TRACKER_MODULE:AddObjective(block, "Money", text);
-				end
-				-- timer bar
-				if ( failureTime and block.currentLine ) then
-					local currentLine = block.currentLine;
-					if ( timeElapsed and timeElapsed <= failureTime ) then
-						-- if a timer was attached to another line, release it
-						if ( block.timerLine and block.timerLine ~= currentLine ) then
-							QUEST_TRACKER_MODULE:FreeTimerBar(block, block.timerLine);
-						end
-						QUEST_TRACKER_MODULE:AddTimerBar(block, currentLine, failureTime, GetTime() - timeElapsed);
-						block.timerLine = currentLine;
-					elseif ( block.timerLine ) then
-						QUEST_TRACKER_MODULE:FreeTimerBar(block, block.timerLine);
-					end
-				end
-			end		
-			block:SetHeight(block.height);
-			
-			if ( ObjectiveTracker_AddBlock(block) ) then
-				if ( existingBlock and isComplete and not block.questCompleted ) then
-					QuestSuperTracking_OnQuestCompleted();
-				end
-				block.questCompleted = isComplete;
-				block:Show();
-				QUEST_TRACKER_MODULE:FreeUnusedLines(block);
-				-- quest POI icon
-				if ( showPOIs ) then
-					local poiButton;
-					if ( hasLocalPOI ) then
-						if ( isComplete ) then
-							poiButton = QuestPOI_GetButton(ObjectiveTrackerFrame.BlocksFrame, questID, "normal", nil);
-						else
-							numPOINumeric = numPOINumeric + 1;
-							poiButton = QuestPOI_GetButton(ObjectiveTrackerFrame.BlocksFrame, questID, "numeric", numPOINumeric);
-						end
-					elseif ( isComplete ) then
-						poiButton = QuestPOI_GetButton(ObjectiveTrackerFrame.BlocksFrame, questID, "remote", nil);
-					end
-					if ( poiButton ) then
-						poiButton:SetParent(block);
-						poiButton:SetPoint("TOPRIGHT", block.HeaderText, "TOPLEFT", -6, 2);
-					end				
-				end
-			else
-				block.used = false;
-				break;
-			end
-		end
+function QUEST_TRACKER_MODULE:ShouldDisplayQuest(quest)
+	if quest.isTask or (quest.isBounty and not isComplete) or quest:IsDisabledForSession() then
+		return false;
 	end
 
-	ObjectiveTracker_WatchMoney(watchMoney, OBJECTIVE_TRACKER_UPDATE_MODULE_QUEST);
-	QuestSuperTracking_CheckSelection();
-	QuestPOI_SelectButtonByQuestID(ObjectiveTrackerFrame.BlocksFrame, GetSuperTrackedQuestID());
-	QuestPOI_HideUnusedButtons(ObjectiveTrackerFrame.BlocksFrame);
-	QUEST_TRACKER_MODULE:EndLayout();
+	return not quest:IsCampaign();
 end

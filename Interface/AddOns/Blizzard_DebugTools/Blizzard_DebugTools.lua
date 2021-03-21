@@ -1,7 +1,6 @@
 EVENT_TRACE_EVENT_HEIGHT = 16;
 EVENT_TRACE_MAX_ENTRIES = 1000;
 
-DEBUGLOCALS_LEVEL = 4;
 local _normalFontColor = { 1, .82, 0, 1 };
 
 EVENT_TRACE_SYSTEM_TIMES = {};
@@ -20,6 +19,10 @@ local _timeSinceLast = 0;
 local _timer = CreateFrame("FRAME");
 _timer:SetScript("OnUpdate", function (self, elapsed) _framesSinceLast = _framesSinceLast + 1; _timeSinceLast = _timeSinceLast + elapsed; end);
 
+function CanAccessObject(obj)
+	return issecure() or not obj:IsForbidden();
+end
+
 function EventTraceFrame_OnLoad (self)
 	self.buttons = {};
 	self.events = {};
@@ -37,7 +40,7 @@ function EventTraceFrame_OnLoad (self)
 	self.lastIndex = 0;
 	self.visibleButtons = 0;
 	_EventTraceFrame = self;
-	self:SetScript("OnSizeChanged", EventTraceFrame_OnSizeChanged); 
+	self:SetScript("OnSizeChanged", EventTraceFrame_OnSizeChanged);
 	EventTraceFrame_OnSizeChanged(self, self:GetWidth(), self:GetHeight());
 	self:EnableMouse(true);
 	self:EnableMouseWheel(true);
@@ -50,7 +53,7 @@ function EventTraceFrame_OnEvent (self, event, ...)
 		if ( _framesSinceLast ~= 0 and event ~= "On Update") then
 			EventTraceFrame_OnEvent(self, "On Update");
 		end
-		
+
 		local nextIndex = self.lastIndex + 1;
 		if ( nextIndex > EVENT_TRACE_MAX_ENTRIES ) then
 			local staleIndex = nextIndex - EVENT_TRACE_MAX_ENTRIES;
@@ -68,7 +71,7 @@ function EventTraceFrame_OnEvent (self, event, ...)
 				self.args[k][staleIndex] = nil;
 			end
 		end
-		
+
 		if ( event == "Begin Capture" or event == "End Capture" ) then
 			self.times[nextIndex] = "System";
 			if ( self.eventsToCapture ) then
@@ -105,17 +108,17 @@ function EventTraceFrame_OnEvent (self, event, ...)
 				end
 				self.args[i][nextIndex] = select(i, ...);
 			end
-			
+
 			if ( self.eventsToCapture ) then
 				self.eventsToCapture = self.eventsToCapture - 1;
 			end
 		end
-		
-		-- NOTE: Remember that this work will be captured in the elapsed time for this event, so 
+
+		-- NOTE: Remember that this work will be captured in the elapsed time for this event, so
 		-- don't do anything slow here or it will throw off the profiled data
-		
+
 		self.rawtimes[nextIndex] = GetTime();
-		self.lastIndex = nextIndex;		
+		self.lastIndex = nextIndex;
 		if ( self.eventsToCapture and self.eventsToCapture <= 0 ) then
 			self.eventsToCapture = nil;
 			EventTraceFrame_StopEventCapture();
@@ -137,7 +140,7 @@ end
 function EventTraceFrame_OnSizeChanged (self, width, height)
 	local numButtonsToDisplay = math.floor((height - 36)/EVENT_TRACE_EVENT_HEIGHT);
 	local numButtonsCreated = #self.buttons;
-	
+
 	if ( numButtonsCreated < numButtonsToDisplay ) then
 		for i = numButtonsCreated + 1, numButtonsToDisplay do
 			local button = CreateFrame("BUTTON", "EventTraceFrameButton" .. i, self, "EventTraceEventTemplate");
@@ -166,14 +169,14 @@ end
 
 function EventTraceFrame_Update ()
 	local offset = 0;
-	
+
 	local scrollBar = _G["EventTraceFrameScroll"];
 	local scrollBarValue = scrollBar:GetValue();
 	local minValue, maxValue = scrollBar:GetMinMaxValues();
-	
+
 	local firstID = max(1, _EventTraceFrame.lastIndex - EVENT_TRACE_MAX_ENTRIES + 1);
 	local lastID = _EventTraceFrame.lastIndex or 1;
-	
+
 	if ( firstID >= lastID ) then
 		scrollBar:SetMinMaxValues(firstID-1, lastID);
 	else
@@ -183,7 +186,7 @@ function EventTraceFrame_Update ()
 		scrollBar:SetValue(firstID);
 		scrollBarValue = firstID;
 	end
-	
+
 	if ( scrollBarValue < 1 ) then
 		scrollBarValue = 1;
 	elseif ( not _EventTraceFrame.selectedEvent ) then
@@ -191,7 +194,7 @@ function EventTraceFrame_Update ()
 			scrollBar:SetValue(_EventTraceFrame.lastIndex);
 		end
 	end
-	
+
 	for i = 1, _EventTraceFrame.visibleButtons do
 		local button = _EventTraceFrame.buttons[i];
 		if ( button ) then
@@ -262,50 +265,108 @@ function EventTraceFrame_Update ()
 			end
 		end
 	end
-	
-	EventTraceFrame_UpdateKeyboardStatus();	
+
+	EventTraceFrame_UpdateKeyboardStatus();
 end
 
-function EventTraceFrame_StartEventCapture ()
+function EventTraceFrame_SetEventSet (cmd, eventSet)
+	-- Always unregister old events if we had any
+	if _EventTraceFrame.eventSet then
+		for k, v in ipairs(_EventTraceFrame.eventSet) do
+			_EventTraceFrame:UnregisterEvent(v);
+		end
+	end
+
+	if cmd == "start" then
+		-- When starting capture, either register specific events, or register all
+		_EventTraceFrame.eventSet = eventSet;
+
+		if eventSet then
+			for k, v in ipairs(_EventTraceFrame.eventSet) do
+				_EventTraceFrame:RegisterEvent(v);
+			end
+		else
+			_EventTraceFrame:RegisterAllEvents();
+		end
+	else
+		-- When stopping, only unregister all if there was no previous set, the previous set was already unregistered.
+		if not _EventTraceFrame.eventSet then
+			_EventTraceFrame:UnregisterAllEvents();
+		end
+
+		_EventTraceFrame.eventSet = nil;
+	end
+end
+
+function EventTraceFrame_StartEventCapture (eventSet)
 	if ( _EventTraceFrame.started ) then -- Nothing to do?
 		return;
 	end
-	
+
 	_EventTraceFrame.started = true;
 	_framesSinceLast = 0;
 	_timeSinceLast = 0;
-	_EventTraceFrame:RegisterAllEvents();
+	EventTraceFrame_SetEventSet("start", eventSet);
 	EventTraceFrame_OnEvent(_EventTraceFrame, "Begin Capture");
 end
 
 function EventTraceFrame_StopEventCapture ()
 	if ( not _EventTraceFrame.started ) then -- Nothing to do!
+		EventTraceFrame_SetEventSet(nil); -- well, nothing except ensuring that custom events aren't registered
 		return;
 	end
-	
+
 	_EventTraceFrame.started = false;
 	_framesSinceLast = 0;
-	_timeSinceLast = 0;	
-	_EventTraceFrame:UnregisterAllEvents();
+	_timeSinceLast = 0;
+
+	EventTraceFrame_SetEventSet("stop");
 	EventTraceFrame_OnEvent(_EventTraceFrame, "End Capture");
 end
 
-function EventTraceFrame_HandleSlashCmd (msg)
+function EventTraceFrame_ParseArgsForEvents (msg, ...)
 	msg = strlower(msg);
-	if ( msg == "start" ) then
-		EventTraceFrame_StartEventCapture();
-	elseif ( msg == "stop" ) then
+	if select("#", ...) > 0 then
+		return msg, { select(1, ...) };
+	end
+
+	return msg;
+end
+
+function EventTraceFrame_ParseArgs (msg)
+	if not msg or msg == "" then
+		return "";
+	elseif #msg >= 4 then
+		local isMark = string.lower(string.sub(msg, 1, 4)) == "mark";
+		if isMark then
+			return "mark";
+		end
+	end
+
+	return EventTraceFrame_ParseArgsForEvents(strsplit(" ", msg));
+end
+
+function EventTraceFrame_HandleSlashCmd (msg)
+	local originalMsg = msg;
+	msg, eventSet = EventTraceFrame_ParseArgs(msg);
+	local fixedEventCount = tonumber(msg) or 0; -- This may not be set, that's fine.
+
+	if msg == "start" then
+		EventTraceFrame_StartEventCapture(eventSet);
+	elseif msg == "stop" then
 		EventTraceFrame_StopEventCapture();
-	elseif ( tonumber(msg) and tonumber(msg) > 0 ) then
-		if ( not _EventTraceFrame.started ) then
-			_EventTraceFrame.eventsToCapture = tonumber(msg);
+	elseif fixedEventCount > 0 then
+		if not _EventTraceFrame.started then
+			_EventTraceFrame.eventsToCapture = fixedEventCount;
 			EventTraceFrame_StartEventCapture();
 		end
-	elseif ( msg == "" ) then
-		if ( not _EventTraceFrame:IsShown() ) then
+	elseif msg == "mark" then
+		EventTraceFrame_AddMark(originalMsg:sub(5));
+	else
+		if not _EventTraceFrame:IsShown() then
 			_EventTraceFrame:Show();
-			if ( _EventTraceFrame.started == nil ) then
-				EventTraceFrame_StartEventCapture(); -- If this is the first time we're showing the window, start capturing events immediately.
+			if _EventTraceFrame.started == nil then
+				EventTraceFrame_StartEventCapture(eventSet); -- If this is the first time we're showing the window, start capturing events immediately.
 			end
 		else
 			_EventTraceFrame:Hide();
@@ -313,11 +374,23 @@ function EventTraceFrame_HandleSlashCmd (msg)
 	end
 end
 
+function EventTraceFrame_AddMessage(fmt, ...)
+	EventTraceFrame_OnEvent(_EventTraceFrame, fmt:format(...));
+end
+
+function EventTraceFrame_AddMark(customMark)
+	if customMark and customMark ~= '' then
+		EventTraceFrame_AddMessage("|cff00ff00--- %s ---|r", tostring(customMark));
+	else
+		EventTraceFrame_AddMessage("|cff00ff00--- Mark ---|r");
+	end
+end
+
 function EventTraceFrame_OnMouseWheel (self, delta)
 	local scrollBar = _G["EventTraceFrameScroll"];
 	local minVal, maxVal = scrollBar:GetMinMaxValues();
 	local currentValue = scrollBar:GetValue();
-	
+
 	local newValue = currentValue - ( delta * 3 );
 	newValue = max(newValue, minVal);
 	newValue = min(newValue, maxVal);
@@ -357,7 +430,7 @@ function EventTraceFrame_RemoveEvent(i)
 		tremove(EventTraceFrame.numhandlers, i);
 		tremove(EventTraceFrame.slowesthandlers, i);
 		tremove(EventTraceFrame.slowesthandlertimes, i);
-		
+
 		for k, v in next, EventTraceFrame.args do
 			-- can't use tremove because some of these are nil
 			for j = i, EventTraceFrame.lastIndex do
@@ -392,7 +465,7 @@ function EventTraceFrameEvent_DisplayTooltip (eventButton)
 	if ( not index ) then
 		return;
 	end
-	
+
 	local tooltip = _G["EventTraceTooltip"];
 	tooltip:SetOwner(eventButton, "ANCHOR_NONE");
 	tooltip:SetPoint("TOPLEFT", eventButton, "TOPRIGHT", 24, 2);
@@ -401,7 +474,7 @@ function EventTraceFrameEvent_DisplayTooltip (eventButton)
 		tooltip:AddLine(timeString, 1, 1, 1);
 		tooltip:AddDoubleLine(TIME_LABEL, _EventTraceFrame.rawtimes[index], 1, .82, 0, 1, 1, 1);
 		tooltip:AddDoubleLine(DETAILS_LABEL, _EventTraceFrame.events[index], 1, .82, 0, 1, 1, 1);
-	else	
+	else
 		tooltip:AddLine(_EventTraceFrame.events[index], 1, 1, 1);
 		local eventTime = _EventTraceFrame.eventtimes[index];
 		if (eventTime) then
@@ -484,199 +557,13 @@ function EventTraceFrameEventHideButton_OnClick (button)
 			lastWasElapsed = false;
 		end
 	end
-	
+
 	EventTraceFrame_Update();
 end
 
-local ERROR_FORMAT = [[|cffffd200Message:|r|cffffffff %s|r
-|cffffd200Time:|r|cffffffff %s|r
-|cffffd200Count:|r|cffffffff %s|r
-|cffffd200Stack:|r|cffffffff %s|r
-|cffffd200Locals:|r|cffffffff %s|r]];
-
-local WARNING_AS_ERROR_FORMAT = [[|cffffd200Message:|r|cffffffff %s|r
-|cffffd200Time:|r|cffffffff %s|r
-|cffffd200Count:|r|cffffffff %s|r]];
-
-local WARNING_FORMAT = "Lua Warning:\n"..WARNING_AS_ERROR_FORMAT;
-
-local INDEX_ORDER_FORMAT = "%d / %d"
-
-local _ScriptErrorsFrame;
-
-function ScriptErrorsFrame_OnLoad (self)
-	self.title:SetText(LUA_ERROR);
-	self:RegisterForDrag("LeftButton");
-	self.seen = {};
-	self.order = {};
-	self.count = {};
-	self.messages = {};
-	self.times = {};
-	self.locals = {};
-	self.warnType = {};
-	_ScriptErrorsFrame = self;
-end
-
-function ScriptErrorsFrame_OnShow (self)
-	ScriptErrorsFrame_Update();
-end
-
-function ScriptErrorsFrame_OnError (message, warnType, keepHidden)
-	local stack = debugstack(DEBUGLOCALS_LEVEL);
-	
-	local messageStack = message..stack; -- Fix me later
-	
-	if ( _ScriptErrorsFrame ) then
-		local index = _ScriptErrorsFrame.seen[messageStack];
-		if ( index ) then
-			_ScriptErrorsFrame.count[index] = _ScriptErrorsFrame.count[index] + 1;
-			_ScriptErrorsFrame.messages[index] = message;
-			_ScriptErrorsFrame.times[index] = date();
-			_ScriptErrorsFrame.locals[index] = debuglocals(DEBUGLOCALS_LEVEL);
-		else
-			tinsert(_ScriptErrorsFrame.order, stack);
-			index = #_ScriptErrorsFrame.order;
-			_ScriptErrorsFrame.count[index] = 1;
-			_ScriptErrorsFrame.messages[index] = message;
-			_ScriptErrorsFrame.times[index] = date();
-			_ScriptErrorsFrame.seen[messageStack] = index;
-			_ScriptErrorsFrame.locals[index] = debuglocals(DEBUGLOCALS_LEVEL);
-			_ScriptErrorsFrame.warnType[index] = (warnType or false); --Use false instead of nil
-		end
-		
-		if ( not _ScriptErrorsFrame:IsShown() and not keepHidden ) then
-			_ScriptErrorsFrame.index = index;
-			_ScriptErrorsFrame:Show();
-		else
-			ScriptErrorsFrame_Update();
-		end
-	end
-end
-
-function ScriptErrorsFrame_Update ()
-	local editBox = ScriptErrorsFrameScrollFrameText;
-	local index = _ScriptErrorsFrame.index;
-	if ( not index or not _ScriptErrorsFrame.order[index] ) then
-		index = #_ScriptErrorsFrame.order;
-		_ScriptErrorsFrame.index = index;
-	end
-	
-	if ( index == 0 ) then
-		editBox:SetText("");
-		ScriptErrorsFrame_UpdateButtons();
-		return;
-	end
-	
-	local warnType = _ScriptErrorsFrame.warnType[index];
-
-	local text;
-	if ( warnType ) then
-		local warnFormat = WARNING_FORMAT;
-		if ( warnType == LUA_WARNING_TREAT_AS_ERROR ) then
-			warnFormat = WARNING_AS_ERROR_FORMAT;
-		end
-
-		text = string.format(
-			warnFormat,
-			_ScriptErrorsFrame.messages[index],
-			_ScriptErrorsFrame.times[index],
-			_ScriptErrorsFrame.count[index]
-		);
-	else
-		text = string.format(
-			ERROR_FORMAT, 
-			_ScriptErrorsFrame.messages[index], 
-			_ScriptErrorsFrame.times[index], 
-			_ScriptErrorsFrame.count[index], 
-			_ScriptErrorsFrame.order[index],
-			_ScriptErrorsFrame.locals[index] or "<none>"
-		);
-	end
-
-	local parent = editBox:GetParent();
-	local prevText = editBox.text;
-	editBox.text = text;
-	if ( prevText ~= text ) then
-		editBox:SetText(text);
-		editBox:HighlightText(0);
-		editBox:SetCursorPosition(0);
-	else
-		ScrollingEdit_OnTextChanged(editBox, parent);
-	end
-	parent:SetVerticalScroll(0);
-
-	ScriptErrorsFrame_UpdateButtons();
-end
-
-function ScriptErrorsFrame_UpdateButtons ()
-	local index = _ScriptErrorsFrame.index;
-	local numErrors = #_ScriptErrorsFrame.order;
-	if ( index == 0 ) then
-		_ScriptErrorsFrame.next:Disable();
-		_ScriptErrorsFrame.previous:Disable();
-	else
-		if ( numErrors == 1 ) then
-			_ScriptErrorsFrame.next:Disable();
-			_ScriptErrorsFrame.previous:Disable();
-		elseif ( index == 1 ) then
-			_ScriptErrorsFrame.next:Enable();
-			_ScriptErrorsFrame.previous:Disable();
-		elseif ( index == numErrors ) then
-			_ScriptErrorsFrame.next:Disable();
-			_ScriptErrorsFrame.previous:Enable();
-		else
-			_ScriptErrorsFrame.next:Enable();
-			_ScriptErrorsFrame.previous:Enable();
-		end
-	end
-	
-	_ScriptErrorsFrame.indexLabel:SetText(string.format(INDEX_ORDER_FORMAT, index, numErrors));
-end
-
-function ScriptErrorsFrame_DeleteError (index)
-	if ( _ScriptErrorsFrame.order[index] ) then
-		_ScriptErrorsFrame.seen[_ScriptErrorsFrame.messages[index] .. _ScriptErrorsFrame.order[index]] = nil;
-		tremove(_ScriptErrorsFrame.order, index);
-		tremove(_ScriptErrorsFrame.messages, index);
-		tremove(_ScriptErrorsFrame.times, index);
-		tremove(_ScriptErrorsFrame.count, index);
-		tremove(_ScriptErrorsFrame.warnType, index);
-	end
-end
-
-function ScriptErrorsFrameButton_OnClick (self)
-	local id = self:GetID();
-	
-	
-	if ( id == 1 ) then
-		_ScriptErrorsFrame.index = _ScriptErrorsFrame.index + 1;
-	else
-		_ScriptErrorsFrame.index = _ScriptErrorsFrame.index - 1;
-	end
-		
-	ScriptErrorsFrame_Update();
-end
-
---[[  function ScriptErrorsFrameDelete_OnClick (self);
-	local index = _ScriptErrorsFrame.index;
-	ScriptErrorsFrame_DeleteError(index);
-	
-	local numErrors = #_ScriptErrorsFrame.order;
-	if ( numErrors == 0 ) then
-		_ScriptErrorsFrame.index = 0;
-	elseif ( index > numErrors ) then
-		_ScriptErrorsFrame.index = numErrors;
-	end
-	
-	ScriptErrorsFrame_Update();
-end ]]
-
 function DebugTooltip_OnLoad(self)
+	SharedTooltip_OnLoad(self);
 	self:SetFrameLevel(self:GetFrameLevel() + 2);
-	self:SetBackdropBorderColor(TOOLTIP_DEFAULT_COLOR.r, TOOLTIP_DEFAULT_COLOR.g, TOOLTIP_DEFAULT_COLOR.b);
-	self:SetBackdropColor(TOOLTIP_DEFAULT_BACKGROUND_COLOR.r, TOOLTIP_DEFAULT_BACKGROUND_COLOR.g, TOOLTIP_DEFAULT_BACKGROUND_COLOR.b);
-	self.statusBar2 = getglobal(self:GetName().."StatusBar2");
-	self.statusBar2Text = getglobal(self:GetName().."StatusBar2Text");
 end
 
 function FrameStackTooltip_OnDisplaySizeChanged(self)
@@ -688,67 +575,303 @@ function FrameStackTooltip_OnDisplaySizeChanged(self)
 	end
 end
 
+function FrameStackTooltip_IsShowHiddenEnabled()
+	return GetCVarBool("fstack_showhidden");
+end
+
+function FrameStackTooltip_IsHighlightEnabled()
+	return GetCVarBool("fstack_showhighlight");
+end
+
+function FrameStackTooltip_IsShowRegionsEnabled()
+	return GetCVarBool("fstack_showregions");
+end
+
+function FrameStackTooltip_IsShowAnchorsEnabled()
+	return GetCVarBool("fstack_showanchors");
+end
+
+function FrameStackTooltip_OnFramestackVisibilityUpdated(self)
+	if ( self:IsVisible() ) then
+		--[[Since these properties impact the contents displayed on the framestack,
+		toggle the framestack off and then on to reinitialize it.--]]
+		FrameStackTooltip_Hide(self);
+
+		local showHidden = FrameStackTooltip_IsShowHiddenEnabled();
+		local showRegions = FrameStackTooltip_IsShowRegionsEnabled();
+		local showAnchors = FrameStackTooltip_IsShowAnchorsEnabled();
+
+		FrameStackTooltip_Show(self, showHidden, showRegions, showAnchors);
+	end
+end
+
 function FrameStackTooltip_OnLoad(self)
+	Mixin(self, CallbackRegistryMixin);
+	CallbackRegistryMixin.OnLoad(self);
+	self:GenerateCallbackEvents({ "FrameStackOnHighlightFrameChanged", "FrameStackOnShow", "FrameStackOnHide", "FrameStackOnTooltipCleared" });
+
 	DebugTooltip_OnLoad(self);
+	self.nextUpdate = 0;
 
 	FrameStackTooltip_OnDisplaySizeChanged(self);
 	self:RegisterEvent("DISPLAY_SIZE_CHANGED");
+	self:RegisterEvent("FRAMESTACK_VISIBILITY_UPDATED");
+
+	self.commandKeys =
+	{
+		KeyCommand_Create(function() FrameStackTooltip_ChangeHighlight(self, 1); end, KeyCommand.RUN_ON_DOWN, KeyCommand_CreateKey("LALT")),
+		KeyCommand_Create(function() FrameStackTooltip_ChangeHighlight(self, -1); end, KeyCommand.RUN_ON_DOWN, KeyCommand_CreateKey("RALT")),
+		KeyCommand_Create(function() FrameStackTooltip_InspectTable(self); end, KeyCommand.RUN_ON_UP, KeyCommand_CreateKey("CTRL")),
+		KeyCommand_Create(function() FrameStackTooltip_ToggleTextureInformation(self); end, KeyCommand.RUN_ON_DOWN, KeyCommand_CreateKey("SHIFT")),
+		KeyCommand_Create(function() FrameStackTooltip_HandleFrameCommand(self); end, KeyCommand.RUN_ON_DOWN, KeyCommand_CreateKey("CTRL", "C")),
+	};
+end
+
+function FrameStackTooltip_ChangeHighlight(self, direction)
+	self.highlightIndexChanged = direction;
+	self.shouldSetFSObj = true;
+end
+
+function FrameStackTooltip_InspectTable(self)
+	if self.highlightFrame then
+		TableAttributeDisplay:InspectTable(self.highlightFrame);
+		TableAttributeDisplay:Show();
+	end
+end
+
+function FrameStackTooltip_ToggleTextureInformation(self)
+	self.showTextureInfo = not self.showTextureInfo;
+end
+
+function FrameStackTooltip_HandleFrameCommand(self)
+	if self.currentAssets then
+		for index, asset in ipairs(self.currentAssets) do
+			local assetName, assetType = asset[1], asset[2];
+
+			if assetType == "Atlas" then
+				HandleAtlasMemberCommand(assetName);
+				PlaySound(SOUNDKIT.MAP_PING);
+				break;
+			elseif assetType == "File" then
+				CopyToClipboard(assetName);
+				PlaySound(SOUNDKIT.UI_BONUS_LOOT_ROLL_END); -- find sound
+			end
+		end
+	end
 end
 
 function FrameStackTooltip_OnEvent(self, event, ...)
 	if ( event == "DISPLAY_SIZE_CHANGED" ) then
 		FrameStackTooltip_OnDisplaySizeChanged(self);
+	elseif ( event == "FRAMESTACK_VISIBILITY_UPDATED" ) then
+		FrameStackTooltip_OnFramestackVisibilityUpdated(self);
 	end
 end
 
-function FrameStackTooltip_Toggle (showHidden, showRegions)
-	local tooltip = _G["FrameStackTooltip"];
-	if ( tooltip:IsVisible() ) then
-		tooltip:Hide();
-		FrameStackHighlight:Hide();
-	else
-		tooltip:SetOwner(UIParent, "ANCHOR_NONE");
-		tooltip:SetPoint("BOTTOMRIGHT", UIParent, "BOTTOMRIGHT", -CONTAINER_OFFSET_X - 13, CONTAINER_OFFSET_Y);
-		tooltip.default = 1;
-		tooltip.showRegions = showRegions;
-		tooltip.showHidden = showHidden;
-		tooltip:SetFrameStack(showHidden, showRegions);
+local function AreTextureCoordinatesValid(...)
+	local coordCount = select("#", ...);
+	for i = 1, coordCount do
+		if type(select(i, ...)) ~= "number" then
+			return false;
+		end
+	end
+
+	return coordCount == 8;
+end
+
+local function AreTextureCoordinatesEntireImage(...)
+	local ulX, ulY, blX, blY, urX, urY, brX, brY = ...;
+	return	ulX == 0 and ulY == 0 and
+			blX == 0 and blY == 1 and
+			urX == 1 and urY == 0 and
+			brX == 1 and brY == 1;
+end
+
+local function FormatTextureCoordinates(...)
+	if AreTextureCoordinatesValid(...) then
+		if not AreTextureCoordinatesEntireImage(...) then
+			return WrapTextInColorCode(("UL:(%.2f, %.2f), BL:(%.2f, %.2f), UR:(%.2f, %.2f), BR:(%.2f, %.2f)"):format(...), "ff00ffff");
+		end
+
+		return "";
+	end
+
+	return "invalid coordinates";
+end
+
+local function ColorAssetType(assetType)
+	if assetType == "Atlas" then
+		return WrapTextInColorCode(assetType, "ff00ff00");
+	end
+
+	return WrapTextInColorCode(assetType, "ffff0000");
+end
+
+local function FormatTextureAssetName(assetName, assetType)
+	return ("%s: %s"):format(ColorAssetType(assetType), tostring(assetName));
+end
+
+local function FormatTextureInfo(region, ...)
+	if ... ~= nil then
+		local assetInfo = { select(1, ...), select(2, ...) };
+		return ("%s : %s %s"):format(region:GetDebugName(), FormatTextureAssetName(...), FormatTextureCoordinates(select(3, ...))), assetInfo;
 	end
 end
 
-FRAMESTACK_UPDATE_TIME = .1
-local _timeSinceLast = 0
-local _altKeyDown = false
-function FrameStackTooltip_OnUpdate (self, elapsed)
-	local highlightIndexChanged = 0;
-	if ( _altKeyDown ~= IsAltKeyDown() ) then
-		_altKeyDown = not _altKeyDown;
-		if ( _altKeyDown ) then
-			if ( IsRightAltKeyDown() ) then
-				highlightIndexChanged = -1;
-			else
-				highlightIndexChanged = 1;
+local function CheckGetRegionsTextureInfo(...)
+	local info = {};
+	local assets = {};
+	for i = 1, select("#", ...) do
+		local region = select(i, ...);
+		if CanAccessObject(region) and region:IsMouseOver() then
+			local textureInfo, assetInfo = FormatTextureInfo(region, GetTextureInfo(region))
+			if textureInfo then
+				table.insert(info, textureInfo);
+				table.insert(assets, assetInfo);
 			end
 		end
 	end
 
-	_timeSinceLast = _timeSinceLast - elapsed;
-	if ( _timeSinceLast <= 0 or highlightIndexChanged ~= 0 ) then
-		_timeSinceLast = FRAMESTACK_UPDATE_TIME;
-		local highlightFrame = self:SetFrameStack(self.showHidden, self.showRegions, highlightIndexChanged);
+	if #info > 0 then
+		return table.concat(info, "\n"), assets;
+	end
+end
 
-		FrameStackHighlight:ClearAllPoints();
-		if (highlightFrame) then
-			FrameStackHighlight:SetPoint("BOTTOMLEFT", highlightFrame);
-			FrameStackHighlight:SetPoint("TOPRIGHT", highlightFrame);
-			FrameStackHighlight:Show();
+local function CheckFormatTextureInfo(self, obj)
+	if self.showTextureInfo and CanAccessObject(obj) then
+		if obj.GetRegions then
+			return CheckGetRegionsTextureInfo(obj:GetRegions());
 		else
-			FrameStackHighlight:Hide();
+			return CheckGetRegionsTextureInfo(obj);
 		end
 	end
 end
 
-function FrameStackTooltip_OnShow (self)
+function FrameStackTooltip_OnTooltipSetFrameStack(self, highlightFrame)
+	self.highlightFrame = highlightFrame;
+
+	if self.highlightFrame then
+		local textureInfo, assets = CheckFormatTextureInfo(self, self.highlightFrame);
+		if textureInfo then
+			self:AddLine(textureInfo);
+			self.currentAssets = assets;
+		end
+	end
+
+	if self.shouldSetFSObj then
+		fsobj = self.highlightFrame;
+		self.shouldSetFSObj = nil;
+
+		self:TriggerEvent(self.Event.FrameStackOnHighlightFrameChanged, fsobj);
+	end
+
+	if fsobj then
+		self:AddLine(("\nfsobj = %s"):format(fsobj:GetDebugName()));
+	end
+end
+
+function FrameStackTooltip_Show(self, showHidden, showRegions, showAnchors)
+	self:SetOwner(UIParent, "ANCHOR_NONE");
+	self:SetPoint("BOTTOMRIGHT", UIParent, "BOTTOMRIGHT", -(CONTAINER_OFFSET_X or 0) - 13, (CONTAINER_OFFSET_Y or 0));
+	self.default = 1;
+	self.showRegions = showRegions;
+	self.showHidden = showHidden;
+	self.showAnchors = showAnchors;
+	self:SetFrameStack(showHidden, showRegions);
+end
+
+function FrameStackTooltip_Hide(self)
+	self:Hide();
+	FrameStackHighlight:Hide();
+end
+
+function FrameStackTooltip_ToggleDefaults()
+	local tooltip = FrameStackTooltip;
+	if ( tooltip:IsVisible() ) then
+		FrameStackTooltip_Hide(tooltip);
+	else
+		local showHidden = FrameStackTooltip_IsShowHiddenEnabled();
+		local showRegions = FrameStackTooltip_IsShowRegionsEnabled();
+		local showAnchors = FrameStackTooltip_IsShowAnchorsEnabled();
+		FrameStackTooltip_Show(tooltip, showHidden, showRegions, showAnchors);
+	end
+end
+
+function FrameStackTooltip_Toggle(showHidden, showRegions, showAnchors)
+	local tooltip = FrameStackTooltip;
+	if ( tooltip:IsVisible() ) then
+		FrameStackTooltip_Hide(tooltip);
+	else
+		FrameStackTooltip_Show(tooltip, showHidden, showRegions, showAnchors);
+	end
+end
+
+local function AnchorHighlight(frame, highlight, relativePoint)
+	highlight:ClearAllPoints();
+	highlight:SetAllPoints(frame);
+	highlight:Show();
+
+	if highlight.AnchorPoint then
+		if relativePoint then
+			highlight.AnchorPoint:ClearAllPoints();
+			highlight.AnchorPoint:SetPoint("CENTER", highlight, relativePoint);
+			highlight.AnchorPoint:Show();
+		else
+			highlight.AnchorPoint:Hide();
+		end
+	end
+end
+
+AnchorHighlightMixin = {};
+
+function AnchorHighlightMixin:RetrieveAnchorHighlight(pointIndex)
+	if not self.AnchorHighlights then
+		CreateFrame("FRAME", "FrameStackAnchorHighlightTemplate1", self, "FrameStackAnchorHighlightTemplate");
+	end
+
+	while pointIndex > #self.AnchorHighlights do
+		CreateFrame("FRAME", "FrameStackAnchorHighlightTemplate"..(#self.AnchorHighlights + 1), self, "FrameStackAnchorHighlightTemplate");
+	end
+
+	return self.AnchorHighlights[pointIndex];
+end
+
+function AnchorHighlightMixin:HighlightFrame(baseFrame, showAnchors)
+	AnchorHighlight(baseFrame, self);
+
+	local pointIndex = 1;
+	if (showAnchors and baseFrame.GetNumPoints and baseFrame.GetPoint) then -- TODO: Fix for lines
+		while pointIndex <= baseFrame:GetNumPoints() do
+			local _, anchorFrame, anchorRelativePoint = baseFrame:GetPoint(pointIndex);
+			AnchorHighlight(anchorFrame, self:RetrieveAnchorHighlight(pointIndex), anchorRelativePoint);
+			pointIndex = pointIndex + 1;
+		end
+	end
+
+	while self.AnchorHighlights and self.AnchorHighlights[pointIndex] do
+		self.AnchorHighlights[pointIndex]:Hide();
+		pointIndex = pointIndex + 1;
+	end
+end
+
+FRAMESTACK_UPDATE_TIME = .1
+
+function FrameStackTooltip_OnUpdate(self)
+	KeyCommand_Update(self.commandKeys);
+
+	local now = GetTime();
+	if now >= self.nextUpdate or self.highlightIndexChanged ~= 0 then
+		self.nextUpdate = now + FRAMESTACK_UPDATE_TIME;
+		self.highlightFrame = self:SetFrameStack(self.showHidden, self.showRegions, self.highlightIndexChanged);
+		self.highlightIndexChanged = 0;
+		if self.highlightFrame and FrameStackTooltip_IsHighlightEnabled() then
+			FrameStackHighlight:HighlightFrame(self.highlightFrame, self.showAnchors);
+		end
+	end
+
+end
+
+function FrameStackTooltip_OnShow(self)
 	local parent = self:GetParent() or UIParent;
 	local ps = parent:GetEffectiveScale();
 	local px, py = parent:GetCenter();
@@ -768,6 +891,78 @@ function FrameStackTooltip_OnShow (self)
 			self:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -20, -20);
 		end
 	end
+
+	self:TriggerEvent(self.Event.FrameStackOnShow);
+end
+
+function FrameStackTooltip_OnHide(self)
+	self:TriggerEvent(self.Event.FrameStackOnHide);
+end
+
+function FrameStackTooltip_OnTooltipCleared(self)
+	self:TriggerEvent(self.Event.FrameStackOnTooltipCleared);
 end
 
 FrameStackTooltip_OnEnter = FrameStackTooltip_OnShow;
+
+local DebugHighlightColors = {
+	CreateColor(0.1, 0.0, 0.0, 0.5),
+	CreateColor(0.0, 0.1, 0.0, 0.5),
+	CreateColor(0.0, 0.0, 0.1, 0.5),
+	CreateColor(0.1, 0.1, 0.0, 0.5),
+	CreateColor(0.1, 0.1, 0.1, 0.5),
+};
+
+local function GetDebugIdentifierLevel(debugIdentifierFrame)
+	local debugIdentifierLevel = 1;
+	local parent = debugIdentifierFrame:GetParent();
+	while parent and parent.DebugHighlight ~= nil do
+		debugIdentifierLevel = debugIdentifierLevel + 1;
+		parent = parent:GetParent();
+	end
+
+	return debugIdentifierLevel;
+end
+
+function DebugIdentifierFrame_OnLoad(self)
+	if self.DebugName then
+		local debugNameText = string.gsub(self:GetDebugName(), "[.]", " ");
+		self.DebugName:SetText(debugNameText);
+
+		C_Timer.After(0.05, function ()
+			local extraWidth = 10;
+			while (self.DebugName:IsTruncated()) do
+				self.DebugName:SetPoint("LEFT", -extraWidth, 0);
+				self.DebugName:SetPoint("RIGHT", extraWidth, 0);
+				extraWidth = extraWidth + 10;
+			end
+		end);
+	end
+
+	local debugIdentifierLevel = GetDebugIdentifierLevel(self);
+	local debugHighlightColor = DebugHighlightColors[math.min(debugIdentifierLevel, #DebugHighlightColors)];
+	self.DebugHighlight:SetColorTexture(debugHighlightColor:GetRGBA());
+end
+
+-- for checking that deprecated functions returns the same info as the original version
+function CompareFunctionReturns(func1, func2, ...)
+	local ret1 = { func1(...) };
+	local ret2 = { func2(...) };
+	local size = max(#ret1, #ret2);
+	local allPassed = true;
+	for i = 1, size do
+		if ret1[i] == ret2[i] then
+			print("["..i.."] pass");
+		else
+			print("["..i.."] "..RED_FONT_COLOR_CODE.."fail");
+			print(ret1[i]);
+			print(ret2[i]);
+			allPassed = false;
+		end
+	end
+	if allPassed then
+		print("=== PASS ===");
+	else
+		print("=== " ..RED_FONT_COLOR_CODE.."FAIL"..FONT_COLOR_CODE_CLOSE.." ===");
+	end
+end

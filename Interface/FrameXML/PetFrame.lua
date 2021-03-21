@@ -24,31 +24,37 @@ function PetFrame_OnLoad (self)
 	--self.flashTimer = 0;
 	CombatFeedback_Initialize(self, PetHitIndicator, 30);
 	PetFrame_Update(self);
-	self:RegisterEvent("UNIT_PET");
+	self:RegisterUnitEvent("UNIT_PET", "player");
+	self:RegisterUnitEvent("UNIT_EXITED_VEHICLE", "player");
 	self:RegisterEvent("PET_ATTACK_START");
 	self:RegisterEvent("PET_ATTACK_STOP");
 	self:RegisterEvent("PET_UI_UPDATE");
-	self:RegisterEvent("PET_RENAMEABLE");
 	self:RegisterUnitEvent("UNIT_COMBAT", "pet", "player");
 	self:RegisterUnitEvent("UNIT_AURA", "pet", "player");
 	local showmenu = function()
 		ToggleDropDownMenu(1, nil, PetFrameDropDown, "PetFrame", 44, 8);
 	end
 	SecureUnitButton_OnLoad(self, "pet", showmenu);
-	
-	local _, class = UnitClass("player");
-	if ( class == "DEATHKNIGHT" or class == "ROGUE") then
+end
+
+function PetFrame_UpdateAnchoring(self)
+	if self.unit == "player" and PlayerVehicleHasComboPoints() then
 		self:SetPoint("TOPLEFT", PlayerFrame, "TOPLEFT", 60, -75);
-	elseif ( class == "SHAMAN" or class == "DRUID" ) then
-		self:SetPoint("TOPLEFT", PlayerFrame, "TOPLEFT", 60, -100);
-	elseif ( class == "WARLOCK" ) then
-		self:SetPoint("TOPLEFT", PlayerFrame, "TOPLEFT", 60, -90);
-	elseif ( class == "PALADIN" ) then
-		self:SetPoint("TOPLEFT", PlayerFrame, "TOPLEFT", 60, -90);
-	elseif ( class == "PRIEST" ) then
-		self:SetPoint("TOPLEFT", PlayerFrame, "TOPLEFT", 60, -90);
-	elseif ( class == "MONK" ) then
-		self:SetPoint("TOPLEFT", PlayerFrame, "TOPLEFT", 90, -100);
+	else
+		local _, class = UnitClass("player");
+		if ( class == "DEATHKNIGHT" or class == "ROGUE") then
+			self:SetPoint("TOPLEFT", PlayerFrame, "TOPLEFT", 60, -75);
+		elseif ( class == "SHAMAN" or class == "DRUID" ) then
+			self:SetPoint("TOPLEFT", PlayerFrame, "TOPLEFT", 60, -100);
+		elseif ( class == "WARLOCK" ) then
+			self:SetPoint("TOPLEFT", PlayerFrame, "TOPLEFT", 60, -90);
+		elseif ( class == "PALADIN" ) then
+			self:SetPoint("TOPLEFT", PlayerFrame, "TOPLEFT", 60, -90);
+		elseif ( class == "PRIEST" ) then
+			self:SetPoint("TOPLEFT", PlayerFrame, "TOPLEFT", 60, -90);
+		elseif ( class == "MONK" ) then
+			self:SetPoint("TOPLEFT", PlayerFrame, "TOPLEFT", 90, -100);
+		end
 	end
 end
 
@@ -75,13 +81,14 @@ function PetFrame_Update (self, override)
 			self:Hide();
 		end
 	end
+	
+	PetFrame_UpdateAnchoring(self)
 end
 
 function PetFrame_OnEvent (self, event, ...)
 	UnitFrame_OnEvent(self, event, ...);
-
 	local arg1, arg2, arg3, arg4, arg5 = ...;
-	if ( (event == "UNIT_PET" and arg1 == "player" ) or event == "PET_UI_UPDATE" ) then
+	if ( event == "UNIT_PET" or event == "UNIT_EXITED_VEHICLE" or event == "PET_UI_UPDATE" ) then
 		local unit
 		if ( UnitInVehicle("player") ) then
 			if ( UnitHasVehiclePlayerFrameUI("player") ) then
@@ -107,8 +114,6 @@ function PetFrame_OnEvent (self, event, ...)
 		PetAttackModeTexture:Show();
 	elseif ( event == "PET_ATTACK_STOP" ) then
 		PetAttackModeTexture:Hide();
-	elseif ( event == "PET_RENAMEABLE" ) then
-		StaticPopup_Show("RENAME_PET");
 	end
 end
 

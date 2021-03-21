@@ -40,7 +40,7 @@
 					</Anchors>
 					<TexCoords left="0.5" right="0.75" top="0" bottom="1"/>
 				</NormalTexture>
-				<ButtonText name="$parentText">
+				<ButtonText name="$parentText" parentKey="Text">
 					<Anchors>
 						<Anchor point="RIGHT">
 							<Offset>
@@ -79,7 +79,7 @@
 					</Anchors>
 					<TexCoords left="0.25" right="0.5" top="0" bottom="1"/>
 				</NormalTexture>
-				<ButtonText name="$parentText">
+				<ButtonText name="$parentText" parentKey="Text">
 					<Anchors>
 						<Anchor point="RIGHT">
 							<Offset>
@@ -118,7 +118,7 @@
 					</Anchors>
 					<TexCoords left="0" right="0.25" top="0" bottom="1"/>
 				</NormalTexture>
-				<ButtonText name="$parentText">
+				<ButtonText name="$parentText" parentKey="Text">
 					<Anchors>
 						<Anchor point="RIGHT">
 							<Offset>
@@ -207,7 +207,7 @@
 					</Anchors>
 					<TexCoords left="0.5" right="0.75" top="0" bottom="1"/>
 				</NormalTexture>
-				<ButtonText name="$parentText">
+				<ButtonText name="$parentText" parentKey="Text">
 					<Anchors>
 						<Anchor point="RIGHT">
 							<Offset>
@@ -246,7 +246,7 @@
 					</Anchors>
 					<TexCoords left="0.25" right="0.5" top="0" bottom="1"/>
 				</NormalTexture>
-				<ButtonText name="$parentText">
+				<ButtonText name="$parentText" parentKey="Text">
 					<Anchors>
 						<Anchor point="RIGHT">
 							<Offset>
@@ -285,7 +285,7 @@
 					</Anchors>
 					<TexCoords left="0" right="0.25" top="0" bottom="1"/>
 				</NormalTexture>
-				<ButtonText name="$parentText">
+				<ButtonText name="$parentText" parentKey="Text">
 					<Anchors>
 						<Anchor point="RIGHT">
 							<Offset>
@@ -319,9 +319,7 @@
 		</Scripts>
 	</Frame>
 	<Button name="SmallDenominationTemplate" virtual="true">
-		<Size>
-			<AbsDimension x="32" y="13"/>
-		</Size>
+		<Size x="32" y="13"/>
 		<Scripts>
 			<OnEnter>
 				GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
@@ -332,60 +330,104 @@
 				ResetCursor();
 			</OnLeave>
 		</Scripts>
-		<ButtonText name="$parentText">
-			<Anchors>
-				<Anchor point="LEFT">
-					<Offset>
-						<AbsDimension x="-13" y="0"/>
-					</Offset>
-				</Anchor>
-			</Anchors>
-		</ButtonText>
-		<NormalTexture name="$parentTexture">
-			<Size>
-				<AbsDimension x="13" y="13"/>
-			</Size>
+		<ButtonText name="$parentText" parentKey="Text">
 			<Anchors>
 				<Anchor point="LEFT"/>
 			</Anchors>
+		</ButtonText>
+		<NormalTexture name="$parentTexture">
+			<Size x="13" y="13"/>
+			<Anchors>
+				<Anchor point="LEFT" x="13" y="0"/>
+			</Anchors>
 		</NormalTexture>
 		<NormalFont style="NumberFontNormalRight"/>
-		<PushedTextOffset>
-			<AbsDimension x="0" y="0"/>
-		</PushedTextOffset>
+		<PushedTextOffset x="0" y="0"/>
 	</Button>
 	<Frame name="SmallAlternateCurrencyFrameTemplate" virtual="true">
-		<Size>
-			<AbsDimension x="128" y="13"/>
-		</Size>
+		<Size x="128" y="13"/>
 		<Frames>
 			<Button name="$parentItem1" inherits="SmallDenominationTemplate" hidden="true">
 				<Anchors>
-					<Anchor point="LEFT">
-						<Offset>
-							<AbsDimension x="13" y="0"/>
-						</Offset>
-					</Anchor>
+					<Anchor point="LEFT"/>
 				</Anchors>
 			</Button>
 			<Button name="$parentItem2" inherits="SmallDenominationTemplate" hidden="true">
 				<Anchors>
-					<Anchor point="LEFT" relativeTo="$parentItem1" relativePoint="RIGHT">
-						<Offset>
-							<AbsDimension x="4" y="0"/>
-						</Offset>
-					</Anchor>
+					<Anchor point="LEFT" relativeTo="$parentItem1" relativePoint="RIGHT" x="4" y="0"/>
 				</Anchors>
 			</Button>
 			<Button name="$parentItem3" inherits="SmallDenominationTemplate" hidden="true">
 				<Anchors>
-					<Anchor point="LEFT" relativeTo="$parentItem2" relativePoint="RIGHT">
-						<Offset>
-							<AbsDimension x="4" y="0"/>
-						</Offset>
-					</Anchor>
+					<Anchor point="LEFT" relativeTo="$parentItem2" relativePoint="RIGHT" x="4" y="0"/>
 				</Anchors>
 			</Button>
 		</Frames>
+	</Frame>
+
+	<Frame name="MoneyDenominationDisplayTemplate" mixin="MoneyDenominationDisplayMixin" virtual="true">
+		<Size x="32" y="13"/>
+		<!-- This key value is required and determines the denomination to display.
+		<KeyValues>
+			<KeyValue key="displayType" value="MoneyDenominationDisplayType.Copper" type="global"/>
+		</KeyValues>
+		-->
+		<Layers>
+			<Layer level="ARTWORK">
+				<Texture parentKey="Icon">
+					<Size  x="13" y="13"/>
+					<Anchors>
+						<Anchor point="RIGHT"/>
+					</Anchors>
+				</Texture>
+				<FontString parentKey="Text" inherits="PriceFont" justifyH="RIGHT">
+					<Anchors>
+						<Anchor point="RIGHT" x="-13" y="0"/>
+					</Anchors>
+					<Shadow x="1" y="-1">
+						<Color r="0" g="0" b="0"/>
+					</Shadow>
+				</FontString>
+			</Layer>
+		</Layers>
+		<Scripts>
+			<OnLoad method="OnLoad"/>
+		</Scripts>
+	</Frame>
+
+	<Frame name="MoneyDisplayFrameTemplate" mixin="MoneyDisplayFrameMixin" virtual="true">
+		<Size x="128" y="13"/>
+		<!--
+			hideCopper: Hides the copper amount.
+			leftAlign: Aligns the display to the left of the frame instead of the right.
+			resizeToFit: Changes width based on the amount displayed.
+			useAuctionHouseIcons: Use the newer auction house money icons. This may become the default in the future.
+		<KeyValues>
+			<KeyValue key="hideCopper" value="true" type="boolean"/>
+			<KeyValue key="leftAlign" value="true" type="boolean"/>
+			<KeyValue key="resizeToFit" value="true" type="boolean"/>
+			<KeyValue key="useAuctionHouseIcons" value="true" type="boolean"/>
+		</KeyValues>
+		-->
+		<Frames>
+			<Frame parentKey="CopperDisplay" inherits="MoneyDenominationDisplayTemplate">
+				<KeyValues>
+					<KeyValue key="displayType" value="MoneyDenominationDisplayType.Copper" type="global"/>
+				</KeyValues>
+			</Frame>
+			<Frame parentKey="SilverDisplay" inherits="MoneyDenominationDisplayTemplate">
+				<KeyValues>
+					<KeyValue key="displayType" value="MoneyDenominationDisplayType.Silver" type="global"/>
+				</KeyValues>
+			</Frame>
+			<Frame parentKey="GoldDisplay" inherits="MoneyDenominationDisplayTemplate">
+				<KeyValues>
+					<KeyValue key="displayType" value="MoneyDenominationDisplayType.Gold" type="global"/>
+				</KeyValues>
+			</Frame>
+		</Frames>
+		<Scripts>
+			<OnLoad method="OnLoad"/>
+		</Scripts>
 	</Frame>
 </Ui>

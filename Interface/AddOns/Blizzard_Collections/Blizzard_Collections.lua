@@ -1,5 +1,4 @@
 COLLECTIONS_FANFARE_ICON = "Interface/Icons/Item_Shop_GiftBox01";
-COLLECTIONS_FANFARE_DISPLAY_ID = 71933;
 
 function CollectionsJournal_SetTab(self, tab)
 	PanelTemplates_SetTab(self, tab);
@@ -7,8 +6,12 @@ function CollectionsJournal_SetTab(self, tab)
 	CollectionsJournal_UpdateSelectedTab(self);
 end
 
+function CollectionsJournal_GetTab(self)
+	return PanelTemplates_GetSelectedTab(self);
+end
+
 local function ShouldShowHeirloomTabHelpTip()
-	if GetCVarBitfield("closedInfoFrames", LE_FRAME_TUTORIAL_HEIRLOOM_JOURNAL_TAB) or IsKioskModeEnabled() then
+	if GetCVarBitfield("closedInfoFrames", LE_FRAME_TUTORIAL_HEIRLOOM_JOURNAL_TAB) or Kiosk.IsEnabled() then
 		return false;
 	end
 
@@ -20,15 +23,11 @@ local function ShouldShowHeirloomTabHelpTip()
 end
 
 local function ShouldShowWardrobeTabHelpTip()
-	if GetCVarBitfield("closedInfoFrames", LE_FRAME_TUTORIAL_TRANSMOG_JOURNAL_TAB) or IsKioskModeEnabled() then
+	if GetCVarBitfield("closedInfoFrames", LE_FRAME_TUTORIAL_TRANSMOG_JOURNAL_TAB) or Kiosk.IsEnabled() then
 		return false;
 	end
 
 	if PetJournal_HelpPlate and HelpPlate_IsShowing(PetJournal_HelpPlate) then
-		return false;
-	end
-
-	if CollectionsJournal.HeirloomTabHelpBox:IsShown() then
 		return false;
 	end
 
@@ -40,7 +39,7 @@ function CollectionsJournal_ValidateTab(tabNum)
 end
 
 function CollectionsJournal_UpdateSelectedTab(self)
-	local selected = PanelTemplates_GetSelectedTab(self);
+	local selected = CollectionsJournal_GetTab(self);
 
 	if (not CollectionsJournal_ValidateTab(selected)) then
 		PanelTemplates_SetTab(self, 1);
@@ -73,22 +72,46 @@ function CollectionsJournal_UpdateSelectedTab(self)
 		CollectionsJournalTitleText:SetText(WARDROBE);
 	end
 
-	self.HeirloomTabHelpBox:SetShown(ShouldShowHeirloomTabHelpTip());
-	self.WardrobeTabHelpBox:SetShown(ShouldShowWardrobeTabHelpTip());
+	HelpTip:HideAll(self);
+	if ShouldShowHeirloomTabHelpTip() then
+		local helpTipInfo = {
+			text = HEIRLOOMS_JOURNAL_TUTORIAL_TAB,
+			buttonStyle = HelpTip.ButtonStyle.Close,
+			cvarBitfield = "closedInfoFrames",
+			bitfieldFlag = LE_FRAME_TUTORIAL_HEIRLOOM_JOURNAL_TAB,
+			targetPoint = HelpTip.Point.TopEdgeCenter,
+			offsetY = -7,
+		};
+		HelpTip:Show(self, helpTipInfo, CollectionsJournalTab4);
+	elseif ShouldShowWardrobeTabHelpTip() then
+		local helpTipInfo = {
+			text = TRANSMOG_JOURNAL_TAB_TUTORIAL,
+			buttonStyle = HelpTip.ButtonStyle.Close,
+			cvarBitfield = "closedInfoFrames",
+			bitfieldFlag = LE_FRAME_TUTORIAL_TRANSMOG_JOURNAL_TAB,
+			targetPoint = HelpTip.Point.TopEdgeCenter,
+			offsetY = -7,
+		};
+		HelpTip:Show(self, helpTipInfo, CollectionsJournalTab5);
+	end
+end
+
+function CollectionsJournal_HideTabHelpTips()
+	HelpTip:HideAll(CollectionsJournal);
 end
 
 function CollectionsJournal_OnShow(self)
 	HideUIPanel(WardrobeFrame);
-	CollectionsMicroButtonAlert:Hide();
+	MainMenuMicroButton_HideAlert(CollectionsMicroButton);
 	MicroButtonPulseStop(CollectionsMicroButton);
 
-	PlaySound("igCharacterInfoOpen");
+	PlaySound(SOUNDKIT.IG_CHARACTER_INFO_OPEN);
 	CollectionsJournal_UpdateSelectedTab(self);
 	UpdateMicroButtons();
 end
 
 function CollectionsJournal_OnHide(self)
-	PlaySound("igCharacterInfoClose");
+	PlaySound(SOUNDKIT.IG_CHARACTER_INFO_CLOSE);
 	UpdateMicroButtons();
 
 	CollectionsMicroButton:EvaluateAlertVisibility();

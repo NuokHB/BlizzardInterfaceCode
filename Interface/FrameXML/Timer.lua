@@ -1,10 +1,12 @@
 TIMER_MINUTES_DISPLAY = "%d:%02d"
 TIMER_TYPE_PVP = 1;
 TIMER_TYPE_CHALLENGE_MODE = 2;
+TIMER_TYPE_PLAYER_COUNTDOWN = 3; 
 
 local TIMER_DATA = {
 	[1] = { mediumMarker = 11, largeMarker = 6, updateInterval = 10 },
 	[2] = { mediumMarker = 100, largeMarker = 100, updateInterval = 100 },
+	[3] = { mediumMarker = 31, largeMarker = 11, updateInterval = 10, finishedSoundKitID = SOUNDKIT.UI_COUNTDOWN_FINISHED, bigNumberSoundKitID = SOUNDKIT.UI_COUNTDOWN_TIMER, mediumNumberFinishedSoundKitID = SOUNDKIT.UI_COUNTDOWN_MEDIUM_NUMBER_FINISHED, barShowSoundKitID = SOUNDKIT.UI_COUNTDOWN_BAR_STATE_STARTS, barHideSoundKitID = SOUNDKIT.UI_COUNTDOWN_BAR_STATE_FINISHED},
 };
 
 TIMER_NUMBERS_SETS = {};
@@ -27,8 +29,8 @@ end
 function StartTimer_OnShow(self)
 	self.time = self.endTime - GetTime();
 	if self.time <= 0 then
+		FreeTimerTrackerTimer(self);
 		self:Hide();
-		self.isFree = true;
 	elseif self.startNumbers:IsPlaying() then
 		self.startNumbers:Stop();
 		self.startNumbers:Play();
@@ -37,15 +39,36 @@ end
 
 function GetPlayerFactionGroup()
 	local factionGroup = UnitFactionGroup("player");
-	-- this might be a rated BG or wargame and if so the player's faction might be altered
-	if ( not IsActiveBattlefieldArena() ) then
-		factionGroup = PLAYER_FACTION_GROUP[GetBattlefieldArenaFaction()];
+	if (C_PvP.IsPVPMap()) then
+		-- this might be a rated BG or wargame and if so the player's faction might be altered
+		if ( not IsActiveBattlefieldArena()) then
+			factionGroup = PLAYER_FACTION_GROUP[GetBattlefieldArenaFaction()];
+		end
 	end
-	
+
 	return factionGroup
 end
 
+function FreeTimerTrackerTimer(timer)
+	timer.time = nil;
+	timer.type = nil;
+	timer.isFree = true;
+	timer.barShowing = false;
+	timer:SetScript("OnUpdate", nil);
+	timer.fadeBarOut:Stop();
+	timer.fadeBarIn:Stop();
+	timer.startNumbers:Stop();
+	timer.GoTextureAnim:Stop();
+	timer.bar:SetAlpha(0);
+end
+
 function TimerTracker_OnEvent(self, event, ...)
+	if C_Commentator.IsSpectating() then
+		self:SetParent(WorldFrame);
+	else
+		self:SetParent(UIParent);
+	end
+	
 	if event == "START_TIMER" then
 		local timerType, timeSeconds, totalTime  = ...;
 		local timer;
@@ -60,7 +83,7 @@ function TimerTracker_OnEvent(self, event, ...)
 			end
 		end
 
-		if isTimerRunning then
+		if isTimerRunning and timer.type ~= TIMER_TYPE_PLAYER_COUNTDOWN then
 			-- don't interupt the final count down
 			if not timer.startNumbers:IsPlaying() then
 				timer.time = timeSeconds;
@@ -76,7 +99,7 @@ function TimerTracker_OnEvent(self, event, ...)
 			end
 			
 			if not timer then
-				timer = CreateFrame("FRAME", self:GetName().."Timer"..(#self.timerList+1), UIParent, "StartTimerBar");
+				timer = CreateFrame("FRAME", self:GetName().."Timer"..(#self.timerList+1), self, "StartTimerBar");
 				self.timerList[#self.timerList+1] = timer;
 			end
 			
@@ -109,15 +132,9 @@ function TimerTracker_OnEvent(self, event, ...)
 		StartTimer_SetGoTexture(timer);
 	elseif event == "PLAYER_ENTERING_WORLD" then
 		for a,timer in pairs(self.timerList) do
-			timer.time = nil;
-			timer.type = nil;
-			timer.isFree = true;
-			timer:SetScript("OnUpdate", nil);
-			timer.fadeBarOut:Stop();
-			timer.fadeBarIn:Stop();
-			timer.startNumbers:Stop();
-			timer.GoTextureAnim:Stop();
-			timer.bar:SetAlpha(0);
+			if(timer.type == "TIMER_TYPE_PVP") then 
+				FreeTimerTrackerTimer(timer);
+			end
 		end
 	end
 end
@@ -125,6 +142,15 @@ end
 
 function StartTimer_BigNumberOnUpdate(self, elapsed)
 	self.time = self.endTime - GetTime();
+	if C_Commentator.IsSpectating() then
+		if self.time < TIMER_DATA[self.type].mediumMarker then
+			self:SetAlpha(1);
+		else
+			self.bar:Hide();
+			return;
+		end
+	end
+	
 	self.updateTime = self.updateTime - elapsed;
 	local minutes, seconds = floor(self.time/60), floor(mod(self.time, 60)); 
 
@@ -137,14 +163,19 @@ function StartTimer_BigNumberOnUpdate(self, elapsed)
 		if ( self.barShowing ) then
 			self.barShowing = false;
 			self.fadeBarOut:Play();
+			if (TIMER_DATA[self.type].barHideSoundKitID) then 
+				PlaySound(TIMER_DATA[self.type].barHideSoundKitID); 
+			end 
 		else
 			self.startNumbers:Play();
 		end
 	elseif not self.barShowing then
 		self.fadeBarIn:Play();
 		self.barShowing = true;
+		if (TIMER_DATA[self.type].barShowSoundKitID) then 
+			PlaySound(TIMER_DATA[self.type].barShowSoundKitID); 
+		end 
 	elseif self.updateTime <= 0 then
-		QueryWorldCountdownTimer(self.type);
 		self.updateTime = TIMER_DATA[self.type].updateInterval;
 	end
 
@@ -161,9 +192,7 @@ function StartTimer_BarOnlyOnUpdate(self, elapsed)
 	self.bar.timeText:SetText(string.format(TIMER_MINUTES_DISPLAY, minutes, seconds));
 	
 	if self.time < 0 then
-		self:SetScript("OnUpdate", nil);
-		self.barShowing = false;
-		self.isFree = true;
+		FreeTimerTrackerTimer(self);
 		self:Hide();
 	end
 	
@@ -212,10 +241,14 @@ function StartTimer_SetTexNumbers(self, ...)
 	end
 	
 	if numberOffset > 0 then
-		PlaySoundKitID(25477, "SFX", false);
+		if(TIMER_DATA[self.type].bigNumberSoundKitID and numShown < TIMER_DATA[self.type].largeMarker ) then 
+			PlaySound(TIMER_DATA[self.type].bigNumberSoundKitID); 
+		else 
+			PlaySound(SOUNDKIT.UI_BATTLEGROUND_COUNTDOWN_TIMER, "SFX");
+		end 
 		digits[1]:ClearAllPoints();
-		if self.anchorCenter then
-			digits[1]:SetPoint("CENTER", UIParent, "CENTER", numberOffset - digits[1].hw, 0);
+		if self.anchorCenter or C_Commentator.IsSpectating() then
+			digits[1]:SetPoint("CENTER", TimerTracker, "CENTER", numberOffset - digits[1].hw, 0);
 		else
 			digits[1]:SetPoint("CENTER", self, "CENTER", numberOffset - digits[1].hw, 0);
 		end
@@ -230,15 +263,25 @@ end
 
 function StartTimer_SetGoTexture(timer)
 	if ( timer.type == TIMER_TYPE_PVP ) then
-		local factionGroup = GetPlayerFactionGroup();
-		if ( factionGroup and factionGroup ~= "Neutral" ) then
-			timer.GoTexture:SetTexture("Interface\\Timer\\"..factionGroup.."-Logo");
-			timer.GoTextureGlow:SetTexture("Interface\\Timer\\"..factionGroup.."Glow-Logo");
+		if C_Commentator.IsSpectating() or IsInLFDBattlefield() then
+			timer.GoTexture:SetAtlas("countdown-swords");
+			timer.GoTextureGlow:SetAtlas("countdown-swords-glow");
+
+			StartTimer_SwitchToLargeDisplay(timer);
+		else
+			local factionGroup = GetPlayerFactionGroup();
+			if ( factionGroup and factionGroup ~= "Neutral" ) then
+				timer.GoTexture:SetTexture("Interface\\Timer\\"..factionGroup.."-Logo");
+				timer.GoTextureGlow:SetTexture("Interface\\Timer\\"..factionGroup.."Glow-Logo");
+			end
 		end
 	elseif ( timer.type == TIMER_TYPE_CHALLENGE_MODE ) then
 		timer.GoTexture:SetTexture("Interface\\Timer\\Challenges-Logo");
 		timer.GoTextureGlow:SetTexture("Interface\\Timer\\ChallengesGlow-Logo");
-	end
+	elseif (timer.type == TIMER_TYPE_PLAYER_COUNTDOWN) then 
+		timer.GoTexture:SetTexture("")
+		timer.GoTextureGlow:SetTexture("")
+	end 
 end
 
 function StartTimer_NumberAnimOnFinished(self)
@@ -249,9 +292,12 @@ function StartTimer_NumberAnimOnFinished(self)
 		end	
 		self.startNumbers:Play();
 	else
-		self.anchorCenter = false;
-		self.isFree = true;
-		PlaySoundKitID(25478);
+		if(TIMER_DATA[self.type].finishedSoundKitID) then
+			PlaySound(TIMER_DATA[self.type].finishedSoundKitID); 
+		else
+			PlaySound(SOUNDKIT.UI_BATTLEGROUND_COUNTDOWN_FINISHED);
+		end
+		FreeTimerTrackerTimer(self);
 		self.GoTextureAnim:Play();
 	end
 end
@@ -263,5 +309,9 @@ function StartTimer_SwitchToLargeDisplay(self)
 		self.digit1.width, self.digit2.width = self.style.w, self.style.w;
 		self.digit1:SetSize(self.style.w, self.style.h);
 		self.digit2:SetSize(self.style.w, self.style.h);
+
+		if(TIMER_DATA[self.type].mediumNumberFinishedSoundKitID) then 
+			PlaySound(TIMER_DATA[self.type].mediumNumberFinishedSoundKitID);
+		end 
 	end
 end

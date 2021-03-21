@@ -2,20 +2,13 @@ function AccountLogin_OnLoad(self)
 	local versionType, buildType, version, internalVersion, date = GetBuildInfo();
 	self.UI.ClientVersion:SetFormattedText(VERSION_TEMPLATE, versionType, version, internalVersion, buildType, date);
 
-	-- Color edit box backdrops
-	local backdropColor = DEFAULT_TOOLTIP_COLOR;
-	self.UI.AccountEditBox:SetBackdropBorderColor(backdropColor[1], backdropColor[2], backdropColor[3]);
-	self.UI.AccountEditBox:SetBackdropColor(backdropColor[4], backdropColor[5], backdropColor[6]);
-	self.UI.PasswordEditBox:SetBackdropBorderColor(backdropColor[1], backdropColor[2], backdropColor[3]);
-	self.UI.PasswordEditBox:SetBackdropColor(backdropColor[4], backdropColor[5], backdropColor[6]);
-
 	SetLoginScreenModel(LoginBackgroundModel);
 	AccountLogin_UpdateSavedData(self);
 
 	self:RegisterEvent("SCREEN_FIRST_DISPLAYED");
 	self:RegisterEvent("LOGIN_STATE_CHANGED");
 	self:RegisterEvent("LAUNCHER_LOGIN_STATUS_CHANGED");
-	self:RegisterEvent("FATAL_AUTHENTICATION_FAILURE");
+	self:RegisterEvent("SHOULD_RECONNECT_TO_REALM_LIST");
 
 	AccountLogin_CheckLoginState(self);
 end
@@ -28,13 +21,8 @@ function AccountLogin_OnEvent(self, event, ...)
 		AccountLogin_CheckLoginState(self);
 	elseif ( event == "LAUNCHER_LOGIN_STATUS_CHANGED" ) then
 		AccountLogin_Update();
-	elseif ( event == "FATAL_AUTHENTICATION_FAILURE" ) then
-		local errorCode, isHtml = ...;
-		if ( isHtml ) then
-			GlueDialog_Show("OKAY_HTML_MUST_ACCEPT", _G[errorCode]);
-		else
-			GlueDialog_Show("OKAY_MUST_ACCEPT", _G[errorCode]);
-		end
+	elseif ( event == "SHOULD_RECONNECT_TO_REALM_LIST" ) then
+		C_LoginUI.ReconnectToRealmList();
 	end
 end
 
@@ -90,8 +78,7 @@ function AccountLogin_Update()
 		ServerAlert_Enable(ServerAlertFrame);
 	end
 
-	--Cached login
-	CachedLoginFrameContainer_Update(AccountLogin.UI.CachedLoginFrameContainer);
+	EventRegistry:TriggerEvent("AccountLogin.Update", showButtonsAndStuff);
 
 	for _, region in pairs(AccountLogin.UI.NormalLoginRegions) do
 		region:SetShown(showButtonsAndStuff);
@@ -102,10 +89,6 @@ function AccountLogin_Update()
 	if ( AccountLogin.UI.AccountsDropDown.active ) then
 		AccountLogin.UI.AccountsDropDown:SetShown(showButtonsAndStuff);
 	end
-    if ( shouldCheckSystemReqs and not HasCheckedSystemRequirements() ) then
-    	CheckSystemRequirements();
-        SetCheckedSystemRequirements(true);
-    end
 end
 
 function AccountLogin_UpdateSavedData(self)
@@ -118,76 +101,21 @@ function AccountLogin_UpdateSavedData(self)
 	end
 	if ( GetSavedAccountName() ~= "" and GetSavedAccountList() ~= "" ) then
 		AccountLogin.UI.PasswordEditBox:SetPoint("BOTTOM", 0, 255);
-		AccountLogin.UI.LoginButton:SetPoint("BOTTOM", 0, 150);
+		AccountLogin.UI.LoginButton:SetPoint("BOTTOM", 0, 160);
 		AccountLogin.UI.AccountsDropDown:Show();
 		AccountLogin.UI.AccountsDropDown.active = true;
 	else
 		AccountLogin.UI.PasswordEditBox:SetPoint("BOTTOM", 0, 275);
-		AccountLogin.UI.LoginButton:SetPoint("BOTTOM", 0, 170);
+		AccountLogin.UI.LoginButton:SetPoint("BOTTOM", 0, 180);
 		AccountLogin.UI.AccountsDropDown:Hide();
 		AccountLogin.UI.AccountsDropDown.active = false;
 	end
 	AccountLoginDropDown_SetupList();
 end
 
-function CachedLoginFrameContainer_Update(self)
-	local cachedLogins = C_Login.GetCachedCredentials();
-	if ( cachedLogins ) then
-		if ( not self.Frames ) then
-			self.Frames = {};
-		end
-		local frames = self.Frames;
-		for i=1, #cachedLogins do
-			local frame = frames[i];
-			if ( not frame ) then
-				frame = CreateFrame("FRAME", nil, self, "CachedLoginFrameTemplate");
-				if ( i == 1 ) then
-					frame:SetPoint("TOPRIGHT", self, "TOPRIGHT", -5, -25);
-				else
-					frame:SetPoint("TOP", frames[i-1], "BOTTOM", 0, 5);
-				end
-			end
-
-			frame.account = cachedLogins[i];
-			frame.LoginButton:SetText(frame.account);
-			frame:Show();
-		end
-
-		for i=#cachedLogins + 1, #frames do
-			frames[i]:Hide();
-		end
-	elseif ( self.Frames ) then
-		for i=1, #self.Frames do
-			self.Frames[i]:Hide();
-		end
-	end
-end
-
-function CachedLoginButton_OnClick(self)
-	PlaySound("gsLogin");
-
-	local account = self:GetParent().account;
-	C_Login.CachedLogin(account);
-	if ( AccountLoginDropDown:IsShown() ) then
-		C_Login.SelectGameAccount(GlueDropDownMenu_GetSelectedValue(AccountLoginDropDown));
-	end
-
-	AccountLogin.UI.PasswordEditBox:SetText("");
-	if ( AccountLogin.UI.SaveAccountNameCheckButton:GetChecked() ) then
-		SetSavedAccountName(account);
-	else
-		SetUsesToken(false);
-	end
-end
-
-function CachedLoginDeleteButton_OnClick(self)
-	local account = self:GetParent().account;
-	C_Login.DeleteCachedCredentials(account);
-	CachedLoginFrameContainer_Update(AccountLogin.UI.CachedLoginFrameContainer);
-end
-
 function AccountLogin_Login()
-	PlaySound("gsLogin");
+	C_Login.ClearLastError();
+	PlaySound(SOUNDKIT.GS_LOGIN);
 
 	if ( AccountLogin.UI.AccountEditBox:GetText() == "" ) then
 		GlueDialog_Show("OKAY", LOGIN_ENTER_NAME);
@@ -197,7 +125,7 @@ function AccountLogin_Login()
 		local username = AccountLogin.UI.AccountEditBox:GetText();
 		C_Login.Login(string.gsub(username, "||", "|"), AccountLogin.UI.PasswordEditBox);
 		if ( AccountLoginDropDown:IsShown() ) then
-			C_Login.SelectGameAccount(GlueDropDownMenu_GetSelectedValue(AccountLoginDropDown));
+			C_Login.SelectGameAccount(UIDropDownMenu_GetSelectedValue(AccountLoginDropDown));
 		end
 	end
 
@@ -292,8 +220,8 @@ function WoWAccountSelect_Update()
 	end
 
 	self.Background:SetSize(275, 265);
-	self.Background.AcceptButton:SetPoint("BOTTOMLEFT", 8, 6);
-	self.Background.CancelButton:SetPoint("BOTTOMRIGHT", -8, 6);
+	self.Background.AcceptButton:SetPoint("BOTTOMLEFT", 15, 12);
+	self.Background.CancelButton:SetPoint("BOTTOMRIGHT", -15, 12);
 	self.Background.Container:SetPoint("BOTTOMRIGHT", -16, 36);
 
 	GlueScrollFrame_Update(self.Background.Container.ScrollFrame, #self.gameAccounts, MAX_ACCOUNTNAME_DISPLAYED, ACCOUNTNAME_BUTTON_HEIGHT);
@@ -329,23 +257,23 @@ end
 -- =============================================================
 
 function AccountLoginDropDown_OnLoad(self)
-	GlueDropDownMenu_SetWidth(self, 174);
-	GlueDropDownMenu_SetSelectedValue(self, 1);
-	AccountLoginDropDownText:SetJustifyH("LEFT");	
+	UIDropDownMenu_SetWidth(self, 174);
+	UIDropDownMenu_SetSelectedValue(self, 1);
+	AccountLoginDropDownText:SetJustifyH("LEFT");
 	AccountLoginDropDown_SetupList();
-	GlueDropDownMenu_Initialize(self, AccountLoginDropDown_Initialize);
+	UIDropDownMenu_Initialize(self, AccountLoginDropDown_Initialize);
 end
 
 function AccountLoginDropDown_OnClick(self)
-	GlueDropDownMenu_SetSelectedValue(AccountLoginDropDown, self.value);
+	UIDropDownMenu_SetSelectedValue(AccountLoginDropDown, self.value);
 end
 
 function AccountLoginDropDown_Initialize()
-	local selectedValue = GlueDropDownMenu_GetSelectedValue(AccountLoginDropDown);
+	local selectedValue = UIDropDownMenu_GetSelectedValue(AccountLoginDropDown);
 	local list = AccountLoginDropDown.list;
 	for i = 1, #list do
 		list[i].checked = (list[i].text == selectedValue);
-		GlueDropDownMenu_AddButton(list[i]);
+		UIDropDownMenu_AddButton(list[i]);
 	end
 end
 
@@ -357,8 +285,8 @@ function AccountLoginDropDown_SetupList()
 		if ( strsub(str, 1, 1) == "!" ) then
 			selected = true;
 			str = strsub(str, 2, #str);
-			GlueDropDownMenu_SetSelectedValue(AccountLoginDropDown, str);
-			GlueDropDownMenu_SetText(AccountLoginDropDown, str);
+			UIDropDownMenu_SetSelectedValue(AccountLoginDropDown, str);
+			UIDropDownMenu_SetText(AccountLoginDropDown, str);
 		end
 		AccountLoginDropDown.list[i] = { ["text"] = str, ["value"] = str, ["selected"] = selected, func = AccountLoginDropDown_OnClick };
 		i = i + 1;
@@ -368,12 +296,6 @@ end
 -- =============================================================
 -- Token entry
 -- =============================================================
-
-function TokenEntry_OnLoad(self)
-	local backdropColor = DEFAULT_TOOLTIP_COLOR;
-	self.Background.EditBox:SetBackdropBorderColor(backdropColor[1], backdropColor[2], backdropColor[3]);
-	self.Background.EditBox:SetBackdropColor(backdropColor[4], backdropColor[5], backdropColor[6]);
-end
 
 function TokenEntry_OnShow(self)
 	self.Background.EditBox:SetText("");
@@ -406,12 +328,6 @@ end
 -- =============================================================
 -- Captcha entry
 -- =============================================================
-
-function CaptchaEntry_OnLoad(self)
-	local backdropColor = DEFAULT_TOOLTIP_COLOR;
-	self.Background.EditBox:SetBackdropBorderColor(backdropColor[1], backdropColor[2], backdropColor[3]);
-	self.Background.EditBox:SetBackdropColor(backdropColor[4], backdropColor[5], backdropColor[6]);
-end
 
 function CaptchaEntry_OnShow(self)
 	self.Background.EditBox:SetText("");
@@ -471,8 +387,9 @@ end
 function AccountLogin_CheckAutoLogin()
 	if ( AccountLogin_CanAutoLogin() ) then
 		if ( AccountLogin.timerFinished ) then
-			local accountName, password = GetKioskLoginInfo();
+			local accountName, password, realmAddr = GetKioskLoginInfo();
 			if (accountName and password) then
+				SetKioskAutoRealmAddress(realmAddr);
 				AccountLogin.UI.PasswordEditBox:SetText(password);
 				C_Login.Login(accountName, AccountLogin.UI.PasswordEditBox);
 			else
@@ -495,12 +412,12 @@ end
 -- =============================================================
 
 function AccountLogin_ManageAccount()
-	PlaySound("gsLoginNewAccount");
+	PlaySound(SOUNDKIT.GS_LOGIN_NEW_ACCOUNT);
 	LaunchURL(AUTH_NO_TIME_URL);
 end
 
 function AccountLogin_LaunchCommunitySite()
-	PlaySound("gsLoginNewAccount");
+	PlaySound(SOUNDKIT.GS_LOGIN_NEW_ACCOUNT);
 	LaunchURL(COMMUNITY_URL);
 end
 
@@ -541,5 +458,5 @@ function KoreanRatings_OnUpdate(self, elapsed)
 		SHOW_KOREAN_RATINGS = false;
 		AccountLogin_Update();
 		AccountLogin_CheckAutoLogin();
-	end	
+	end
 end

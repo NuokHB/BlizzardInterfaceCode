@@ -1,3 +1,5 @@
+local LOCAL_CHECK_Frame = CreateFrame("Frame");
+
 -- The "modified attribute" takes the form of: modifier-name-button
 -- The modifier is one of "shift-", "ctrl-", "alt-", and the button is a number from 1 through 5.
 --
@@ -59,7 +61,7 @@ end
 function SecureButton_GetModifierPrefix(frame)
     -- Handle optional frame modifiers attribute
     if ( frame ) then
-        local modlist = frame:GetAttribute("modifiers");
+        local modlist = LOCAL_CHECK_Frame.GetAttribute(frame, "modifiers");
         if ( modlist ) then
             local prefix = SecureButton_ParseModifierString(modlist);
             if ( prefix ) then
@@ -112,10 +114,10 @@ function SecureButton_GetModifiedAttribute(frame, name, button, prefix, suffix)
     if ( not suffix ) then
         suffix = SecureButton_GetButtonSuffix(button);
     end
-    local value = frame:GetAttribute(prefix, name, suffix);
-    if ( not value and (frame:GetAttribute("useparent-"..name) or
-                        frame:GetAttribute("useparent*")) ) then
-        local parent = frame:GetParent();
+    local value = LOCAL_CHECK_Frame.GetAttribute(frame, prefix, name, suffix);
+    if ( not value and (LOCAL_CHECK_Frame.GetAttribute(frame, "useparent-"..name) or
+                        LOCAL_CHECK_Frame.GetAttribute(frame, "useparent*")) ) then
+        local parent = LOCAL_CHECK_Frame.GetParent(frame);
         if ( parent ) then
             value = SecureButton_GetModifiedAttribute(parent, name, button, prefix, suffix);
         end
@@ -220,7 +222,7 @@ local InitializeSecureMenu = function(self)
 		menu = "OTHERBATTLEPET";
 	elseif( UnitIsOtherPlayersPet(unit) ) then
 		menu = "OTHERPET";
-	-- Last ditch checks 
+	-- Last ditch checks
 	elseif( UnitIsPlayer(unit) ) then
 		if( UnitInRaid(unit) ) then
 			menu = "RAID_PLAYER";
@@ -292,7 +294,6 @@ SECURE_ACTIONS.togglemenu = function(self, unit, button)
 		secureDropdown = CreateFrame("Frame", "SecureTemplatesDropdown", nil, "UIDropDownMenuTemplate");
 		secureDropdown:SetID(1);
 
-		table.insert(UnitPopupFrames, secureDropdown:GetName());
 		UIDropDownMenu_Initialize(secureDropdown, InitializeSecureMenu, "MENU");
 	end
 
@@ -330,7 +331,7 @@ SECURE_ACTIONS.actionbar =
 
 SECURE_ACTIONS.action =
     function (self, unit, button)
-        local action = ActionButton_CalculateAction(self, button);
+        local action = self:CalculateAction(button);
         if ( action ) then
             -- Save macros in case the one for this action is being edited
             securecall("MacroFrame_SaveMacro");
@@ -366,7 +367,7 @@ SECURE_ACTIONS.flyout =
 
 SECURE_ACTIONS.multispell =
     function (self, unit, button)
-        local action = ActionButton_CalculateAction(self, button);
+        local action = self:CalculateAction(button);
         local spell = SecureButton_GetModifiedAttribute(self, "spell", button);
         if ( action and spell ) then
             SetMultiCastSpell(action, tonumber(spell) or spell);
@@ -383,7 +384,7 @@ SECURE_ACTIONS.spell =
             CastSpellByName(spell, unit);
         end
     end;
-	
+
 SECURE_ACTIONS.toy =
 	function (self, unit, button)
 		local toy = SecureButton_GetModifiedAttribute(self, "toy", button);
@@ -417,7 +418,16 @@ SECURE_ACTIONS.item =
             end
         end
     end;
-
+	
+SECURE_ACTIONS.equipmentset =
+	function (self, unit, button)
+		local setName = SecureButton_GetModifiedAttribute(self, "equipmentset", button);
+		local setID = setName and C_EquipmentSet.GetEquipmentSetID(setName);
+		if ( setID ) then
+			C_EquipmentSet.UseEquipmentSet(setID);
+		end
+	end;
+	
 SECURE_ACTIONS.macro =
     function (self, unit, button)
         local macro = SecureButton_GetModifiedAttribute(self, "macro", button);
@@ -444,7 +454,7 @@ SECURE_ACTIONS.cancelaura =
     function (self, unit, button)
         local spell = SecureButton_GetModifiedAttribute(self, "spell", button);
         if ( spell ) then
-            CancelUnitBuff(unit, spell, SecureButton_GetModifiedAttribute(self, "rank", button));
+            CancelSpellByName(spell);
         else
             local slot = tonumber(SecureButton_GetModifiedAttribute(self, "target-slot", button));
             if ( slot and CANCELABLE_ITEMS[slot] ) then
@@ -458,7 +468,12 @@ SECURE_ACTIONS.cancelaura =
         end
     end;
 
-SECURE_ACTIONS.destroytotem = 
+SECURE_ACTIONS.leavevehicle =
+	function (self, unit, button)
+		VehicleExit();
+	end;
+
+SECURE_ACTIONS.destroytotem =
 	function(self, unit, button)
 		DestroyTotem(SecureButton_GetModifiedAttribute(self, "totem-slot", button));
 	end;
@@ -563,7 +578,29 @@ SECURE_ACTIONS.worldmarker =
 			end
 		end
 	end;
-	
+
+ SecureActionButtonMixin = {};
+
+function SecureActionButtonMixin:CalculateAction(button)
+    if ( not button ) then
+        button = SecureButton_GetEffectiveButton(self);
+    end
+    if ( self:GetID() > 0 ) then
+        local page = SecureButton_GetModifiedAttribute(self, "actionpage", button);
+        if ( not page ) then
+            page = GetActionBarPage();
+            if ( self.isExtra ) then
+                page = GetExtraBarIndex();
+            elseif ( self.buttonType == "MULTICASTACTIONBUTTON" ) then
+                page = GetMultiCastBarIndex();
+            end
+        end
+        return (self:GetID() + ((page - 1) * NUM_ACTIONBAR_BUTTONS));
+    else
+        return SecureButton_GetModifiedAttribute(self, "action", button) or 1;
+    end
+end
+
 function SecureActionButton_OnClick(self, button, down)
     -- TODO check with Tom etc if this is kosher
     if (down) then

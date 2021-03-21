@@ -19,25 +19,32 @@ function ItemUpgradeFrame_OnLoad(self)
 	self:RegisterEvent("ITEM_UPGRADE_MASTER_SET_ITEM");
 	self:RegisterEvent("ITEM_UPGRADE_MASTER_UPDATE");
 
-	SetPortraitToTexture(ItemUpgradeFramePortrait, "Interface\\Icons\\Spell_Shaman_SpectralTransformation");
+	self:SetPortraitToAsset("Interface\\Icons\\inv_hammer_2h_silverhand_b_01");
 	self.LeftStat[1].BG:Show();
 	self.RightStat[1].BG:Show();
-	ItemUpgradeFrameTitleText:SetText(ITEM_UPGRADE);
-	ItemUpgradeFrameTopTileStreaks:Hide();
-	ItemUpgradeFrameBg:Hide();
+
+	self.Inset:SetPoint("TOPLEFT", 4, -64);
+
+	self:SetTitle(ITEM_UPGRADE);
 end
 
 function ItemUpgradeFrame_OnShow(self)
-	PlaySound("UI_EtherealWindow_Open");
+	PlaySound(SOUNDKIT.UI_ETHEREAL_WINDOW_OPEN);
 	ItemUpgradeFrame_Update();
-	
+	ItemButtonUtil.OpenAndFilterBags(self);
+
+	self:RegisterEvent("BAG_UPDATE");
+
 	ItemUpgradeFrameMoneyFrame:Show();
 end
 
 function ItemUpgradeFrame_OnHide(self)
-	PlaySound("UI_EtherealWindow_Close");
+	PlaySound(SOUNDKIT.UI_ETHEREAL_WINDOW_CLOSE);
 	StaticPopup_Hide("CONFIRM_UPGRADE_ITEM");
 	CloseItemUpgrade();
+	ItemButtonUtil.CloseFilteredBags(self);
+
+	self:UnregisterEvent("BAG_UPDATE");
 
 	ClearItemUpgrade();
 	HideStatsLeft();
@@ -48,77 +55,83 @@ end
 
 function ItemUpgradeFrame_OnEvent(self, event, ...)
 	if ( event == "ITEM_UPGRADE_MASTER_SET_ITEM" ) then
+		self.itemLevel = GetItemUpdateLevel();
 		ItemUpgradeFrame_Update();
 	elseif ( event == "ITEM_UPGRADE_MASTER_UPDATE" ) then
 		ItemUpgradeFrame_Update();
 		self.FinishedGlow.FinishedAnim:Play();
 		self.ItemUpgradedNotification:Show();
 		self.ItemUpgradedNotification.FinishedAnim:Play();
+	elseif ( event == "BAG_UPDATE" ) then
+		local itemLevel = GetItemUpdateLevel();
+		if self.itemLevel and self.itemLevel < itemLevel then
+			ItemUpgradeFrame_Update();
+			self.FinishedGlow.FinishedAnim:Play();
+			self.ItemUpgradedNotification:Show();
+			self.ItemUpgradedNotification.FinishedAnim:Play();
+		end
 	end
 end
 
 function ItemUpgradeFrame_Update()
-	local icon, name, quality, bound, numCurrUpgrades, numMaxUpgrades, cost, currencyType = GetItemUpgradeItemInfo();
+	local icon, name, quality, bound, numCurrUpgrades, numMaxUpgrades, cost, currencyType, failureMessage = GetItemUpgradeItemInfo();
 
 	ItemUpgradeFrameUpgradeButton:Disable();
-	
+
 	local ItemUpgradeFrame = ItemUpgradeFrame;
-	if icon then
+	if ( icon ) then
 		ItemUpgradeFrame.ItemButton.IconTexture:SetTexture(icon);
 		ItemUpgradeFrame.ItemButton.IconTexture:SetTexCoord( 0, 1, 0, 1);
 		local _, _, _, hex = GetItemQualityColor(quality);
 		ItemUpgradeFrame.ItemButton.ItemName:SetText("|c"..hex..name.."|r");
 		ItemUpgradeFrame.ItemButton.BoundStatus:SetText(bound);
-		ItemUpgradeFrame.ItemButton.MissingText:Hide();	
-		ItemUpgradeFrame.ItemButton.Cost.Amount:SetText(cost);
-		local _, _, currencyTexture = GetCurrencyInfo(currencyType);
-		ItemUpgradeFrame.ItemButton.Cost.Icon:SetTexture(currencyTexture);
+		ItemUpgradeFrame.TextFrame.MissingText:Hide();
 		ItemUpgradeFrame.MissingDescription:Hide();
-		ItemUpgradeFrame.MissingFadeOut:Hide();
 		ItemUpgradeFrame.TitleTextLeft:Show();
 		ItemUpgradeFrame.TitleTextRight:Show();
 		ItemUpgradeFrame.HorzBar:Show();
 
-		local canUpgradeItem = false;
-		if(numCurrUpgrades and numMaxUpgrades) then
+		if ( numCurrUpgrades and numMaxUpgrades ) then
+			local canUpgradeItem = false;
 			ItemUpgradeFrame.UpgradeStatus:SetText(numCurrUpgrades.."/"..numMaxUpgrades);
 			ItemUpgradeFrame.UpgradeStatus:Show();
 			if ( numCurrUpgrades < numMaxUpgrades ) then
 				ItemUpgradeFrame.UpgradeStatus:SetTextColor(NORMAL_FONT_COLOR.r, NORMAL_FONT_COLOR.g, NORMAL_FONT_COLOR.b);
 				canUpgradeItem = true;
+				if ( not failureMessage ) then
+					ItemUpgradeFrameUpgradeButton:Enable();
+				end
 			else
-				ItemUpgradeFrame.UpgradeStatus:SetTextColor(RED_FONT_COLOR.r, RED_FONT_COLOR.g, RED_FONT_COLOR.b);			
+				ItemUpgradeFrame.UpgradeStatus:SetTextColor(RED_FONT_COLOR.r, RED_FONT_COLOR.g, RED_FONT_COLOR.b);
 			end
-			ItemUpgradeFrameUpgradeButton:SetEnabled(numCurrUpgrades < numMaxUpgrades);
+
+			if ( failureMessage ) then
+				ItemUpgradeFrame.FeedbackMessage:SetText(failureMessage);
+				ItemUpgradeFrame.FeedbackMessage:Show();
+				canUpgradeItem = false;
+			elseif ( canUpgradeItem )  then
+				ItemUpgradeFrame.FeedbackMessage:Hide();
+			else
+				ItemUpgradeFrame.FeedbackMessage:SetText(ITEM_UPGRADE_NO_MORE_UPGRADES);
+				ItemUpgradeFrame.FeedbackMessage:Show();
+				ItemUpgradeFrame.UpgradeStatus:Hide();
+			end
+			ItemUpgradeFrame_UpdateStats(canUpgradeItem);
 		end
-		if ( canUpgradeItem ) then
-			ItemUpgradeFrame.ItemButton.Cost.Amount:Show();
-			ItemUpgradeFrame.ItemButton.Cost.Icon:Show();
-			ItemUpgradeFrame.NoMoreUpgrades:Hide();
-		else
-			ItemUpgradeFrame.ItemButton.Cost.Icon:Hide();
-			ItemUpgradeFrame.ItemButton.Cost.Amount:Hide();
-			ItemUpgradeFrame.NoMoreUpgrades:Show();
-		end
-		
-		ItemUpgradeFrame_UpdateStats(canUpgradeItem);
 	else	-- There is no item so hide elements
 		ItemUpgradeFrame.ItemButton.IconTexture:SetTexture("Interface\\BUTTONS\\UI-Slot-Background");
 		ItemUpgradeFrame.ItemButton.IconTexture:SetTexCoord( 0, 0.640625, 0, 0.640625);
 		ItemUpgradeFrame.ItemButton.ItemName:SetText("");
 		ItemUpgradeFrame.ItemButton.BoundStatus:SetText("");
-		ItemUpgradeFrame.ItemButton.MissingText:Show();	
-		ItemUpgradeFrame.ItemButton.Cost.Icon:Hide();
-		ItemUpgradeFrame.ItemButton.Cost.Amount:Hide();
+		ItemUpgradeFrame.TextFrame.MissingText:Show();
 		ItemUpgradeFrame.MissingDescription:Show();
-		ItemUpgradeFrame.MissingFadeOut:Show();
 		ItemUpgradeFrame.TitleTextLeft:Hide();
 		ItemUpgradeFrame.TitleTextRight:Hide();
 		ItemUpgradeFrame.UpgradeStatus:Hide();
 		ItemUpgradeFrame.HorzBar:Hide();
 		ItemUpgradeFrame.LeftItemLevel:Hide();
 		ItemUpgradeFrame.RightItemLevel:Hide();
-		ItemUpgradeFrame.NoMoreUpgrades:Hide();
+		ItemUpgradeFrame.FeedbackMessage:Hide();
 		for _, item in pairs(ItemUpgradeFrame.LeftStat) do
 			item:Hide();
 		end
@@ -129,14 +142,17 @@ function ItemUpgradeFrame_Update()
 			item:Hide();
 		end
 	end
-	
+
 	-- update player's currency
 	if ( cost and cost > 0 ) then
-		local _, amount, currencyTexture = GetCurrencyInfo(currencyType);
+		local currencyInfo = C_CurrencyInfo.GetCurrencyInfo(currencyType);
+		local amount = currencyInfo.quantity;
+		local currencyTexture = currencyInfo.iconFileID;
 		ItemUpgradeFrameMoneyFrame.Currency.currencyID = currencyType;
 		ItemUpgradeFrameMoneyFrame.Currency.icon:SetTexture(currencyTexture);
-		ItemUpgradeFrameMoneyFrame.Currency.count:SetText(amount);
+		ItemUpgradeFrameMoneyFrame.Currency.count:SetText(cost);
 		ItemUpgradeFrameMoneyFrame.Currency:Show();
+
 		if ( cost > amount ) then
 			ItemUpgradeFrameUpgradeButton:Disable();
 			ItemUpgradeFrameMoneyFrame.Currency.count:SetTextColor(RED_FONT_COLOR.r, RED_FONT_COLOR.g, RED_FONT_COLOR.b);
@@ -150,13 +166,15 @@ end
 
 function ItemUpgradeFrame_UpgradeClick(self)
 	ItemUpgradeFrameUpgradeButton:Disable();
-	
+
 	local icon, name, quality, _, _, _, cost, currencyType = GetItemUpgradeItemInfo();
-	local r, g, b = GetItemQualityColor(quality); 
-	local currencyName, _, currencyTexture = GetCurrencyInfo(currencyType);
+	local r, g, b = GetItemQualityColor(quality);
+	local currencyInfo = C_CurrencyInfo.GetCurrencyInfo(currencyType);
+	local currencyName = currencyInfo.name;
+	local currencyTexture = currencyInfo.iconFileID;
 	local itemsString = " |T"..currencyTexture..":0:0:0:-1|t "..format(CURRENCY_QUANTITY_TEMPLATE, cost, currencyName);
-	StaticPopup_Show("CONFIRM_UPGRADE_ITEM", itemsString, "", {["texture"] = icon, ["name"] = name, 
-															["color"] = {r, g, b, 1}, ["link"] = nil});
+	StaticPopup_Show("CONFIRM_UPGRADE_ITEM", itemsString, "", {["texture"] = icon, ["name"] = name,
+															["color"] = {r, g, b, 1}, ["link"] = C_ItemUpgrade.GetItemHyperlink()});
 end
 
 function ItemUpgradeFrame_AddItemClick(self, button)
@@ -167,11 +185,11 @@ end
 function ItemUpgradeFrame_UpdateStats(setStatsRight)
 	local itemLevel		= GetItemUpdateLevel();
 	local ilvlInc		= GetItemLevelIncrement();
-	
+
 	ItemUpgradeFrame.LeftItemLevel.iLvlText:SetText(itemLevel);
 	ItemUpgradeFrame.LeftItemLevel.ItemLevelText:SetText(ITEM_UPGRADE_STAT_AVERAGE_ITEM_LEVEL);
 	ItemUpgradeFrame.LeftItemLevel:Show();
-	
+
 	if ( setStatsRight ) then
 		ItemUpgradeFrame.RightItemLevel.incText:SetText(GREEN_FONT_COLOR_CODE.."+"..ilvlInc..FONT_COLOR_CODE_CLOSE);
 		ItemUpgradeFrame.RightItemLevel.iLvlText:SetText(itemLevel + ilvlInc);
@@ -198,7 +216,7 @@ function ItemUpgradeFrame_UpdateStats(setStatsRight)
 			leftStat.ItemText:SetText(GRAY_FONT_COLOR_CODE..name..FONT_COLOR_CODE_CLOSE);
 		end
 		leftStat:Show();
-		
+
 		-- Update the right stat text field.
 		if ( setStatsRight ) then
 			local name, value, active = statsRight[i], statsRight[i + 1], statsRight[i + 2];
@@ -216,7 +234,7 @@ function ItemUpgradeFrame_UpdateStats(setStatsRight)
 		else
 			rightStat:Hide();
 		end
-		
+
 		index = index + 1;
 		statAnchor = leftStat;
 	end
@@ -242,14 +260,14 @@ function ItemUpgradeFrame_UpdateStats(setStatsRight)
 		end
 		local leftText, rightText = GetItemUpgradeEffect(i);
 		row.LeftText:SetText(leftText);
-		
+
 		if ( setStatsRight ) then
 			row.RightText:SetText(ItemUpgradeFrame_GetUpgradedEffectString(leftText, rightText));
 			row.RightText:Show();
 		else
 			row.RightText:Hide();
 		end
-		
+
 		local height = max(row.LeftText:GetHeight(), row.RightText:GetHeight());
 		row:SetHeight(height + 3);
 		row:Show();
@@ -295,7 +313,7 @@ function ItemUpgradeFrame_GetStatRow(index, tryAdd)
 	local leftStat, rightStat;
 	leftStat	= ItemUpgradeFrame.LeftStat[index];
 	rightStat	= ItemUpgradeFrame.RightStat[index];
-	
+
 	if(tryAdd and not leftStat) then
 		if(index > ITEM_UPGRADE_MAX_STATS_SHOWN) then
 			return;
@@ -304,14 +322,14 @@ function ItemUpgradeFrame_GetStatRow(index, tryAdd)
 		leftStat:SetPoint("TOP", ItemUpgradeFrame.LeftStat[index - 1], "BOTTOM", 0, -1);
 		rightStat	= CreateFrame("FRAME", nil, ItemUpgradeFrame, "ItemUpgradeStatTemplateRight");
 		rightStat:SetPoint("TOP", ItemUpgradeFrame.RightStat[index - 1], "BOTTOM", 0, -1);
-		
+
 		leftStat.BG:SetShown(mod(index, 2) == 1);
 		rightStat.BG:SetShown(mod(index, 2) == 1);
 
 		ItemUpgradeFrame.LeftStat[index]	= leftStat;
 		ItemUpgradeFrame.RightStat[index]	= rightStat;
 	end
-	
+
 	return leftStat, rightStat;
 end
 

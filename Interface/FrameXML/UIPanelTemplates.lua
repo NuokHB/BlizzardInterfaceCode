@@ -1,43 +1,4 @@
 
-function SearchBoxTemplate_OnLoad(self)
-	self.searchIcon:SetVertexColor(0.6, 0.6, 0.6);
-	self:SetTextInsets(16, 20, 0, 0);
-	self.Instructions:SetText(SEARCH);
-	self.Instructions:ClearAllPoints();
-	self.Instructions:SetPoint("TOPLEFT", self, "TOPLEFT", 16, 0);
-	self.Instructions:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", -20, 0);
-end
-
-function SearchBoxTemplate_OnEditFocusLost(self)
-	if ( self:GetText() == "" ) then
-		self.searchIcon:SetVertexColor(0.6, 0.6, 0.6);
-		self.clearButton:Hide();
-	end
-end
-
-function SearchBoxTemplate_OnEditFocusGained(self)
-	self.searchIcon:SetVertexColor(1.0, 1.0, 1.0);
-	self.clearButton:Show();
-end
-
-function SearchBoxTemplate_OnTextChanged(self)
-	if ( not self:HasFocus() and self:GetText() == "" ) then
-		self.searchIcon:SetVertexColor(0.6, 0.6, 0.6);
-		self.clearButton:Hide();
-	else
-		self.searchIcon:SetVertexColor(1.0, 1.0, 1.0);
-		self.clearButton:Show();
-	end
-	InputBoxInstructions_OnTextChanged(self);
-end
-
-function SearchBoxTemplateClearButton_OnClick(self)
-	PlaySound("igMainMenuOptionCheckBoxOn");
-	local editBox = self:GetParent();
-	editBox:SetText("");
-	editBox:ClearFocus();
-end
-
 ITEM_SEARCHBAR_LIST = {
 	"BagItemSearchBox",
 	"GuildItemSearchBox",
@@ -78,7 +39,7 @@ function BagSearch_OnChar(self, text)
 	local searchString = self:GetText();
 	if (string.len(searchString) >= MIN_REPEAT_CHARACTERS) then
 		local repeatChar = true;
-		for i=1, MIN_REPEAT_CHARACTERS - 1, 1 do 
+		for i=1, MIN_REPEAT_CHARACTERS - 1, 1 do
 			if ( string.sub(searchString,(0-i), (0-i)) ~= string.sub(searchString,(-1-i),(-1-i)) ) then
 				repeatChar = false;
 				break;
@@ -90,16 +51,31 @@ function BagSearch_OnChar(self, text)
 	end
 end
 
-function ScrollingEdit_OnTextChanged(self, scrollFrame)
-	-- force an update when the text changes
-	self.handleCursorChange = true;
-	ScrollingEdit_OnUpdate(self, 0, scrollFrame);
+local ROLE_COUNT_EVENTS = {
+	"GROUP_ROSTER_UPDATE",
+	"PLAYER_ROLES_ASSIGNED",
+};
+
+RoleCountMixin = {};
+
+function RoleCountMixin:OnShow()
+	self:Refresh();
+	FrameUtil.RegisterFrameForEvents(self, ROLE_COUNT_EVENTS);
 end
 
-function ScrollingEdit_OnCursorChanged(self, x, y, w, h)
-	self.cursorOffset = y;
-	self.cursorHeight = h;
-	self.handleCursorChange = true;
+function RoleCountMixin:OnHide()
+	FrameUtil.UnregisterFrameForEvents(self, ROLE_COUNT_EVENTS);
+end
+
+function RoleCountMixin:OnEvent()
+	self:Refresh();
+end
+
+function RoleCountMixin:Refresh()
+	local counts = GetGroupMemberCountsForDisplay();
+	self.DamagerCount:SetText(counts.DAMAGER);
+	self.HealerCount:SetText(counts.HEALER);
+	self.TankCount:SetText(counts.TANK);
 end
 
 UIFrameCache = CreateFrame("FRAME");
@@ -108,12 +84,12 @@ function UIFrameCache:New (frameType, baseName, parent, template)
 	if ( self ~= UIFrameCache ) then
 		error("Attempt to run factory method on class member");
 	end
-	
+
 	local frameCache = {};
 
 	setmetatable(frameCache, self);
 	self.__index = self;
-	
+
 	frameCache.frameType = frameType;
 	frameCache.baseName = baseName;
 	frameCache.parent = parent;
@@ -123,7 +99,7 @@ function UIFrameCache:New (frameType, baseName, parent, template)
 	frameCache.numFrames = 0;
 
 	tinsert(caches, frameCache);
-	
+
 	return frameCache;
 end
 
@@ -134,7 +110,7 @@ function UIFrameCache:GetFrame ()
 		tinsert(self.usedFrames, frame);
 		return frame;
 	end
-	
+
 	frame = CreateFrame(self.frameType, self.baseName .. self.numFrames + 1, self.parent, self.template);
 	frame.frameCache = self;
 	self.numFrames = self.numFrames + 1;
@@ -148,33 +124,15 @@ function UIFrameCache:ReleaseFrame (frame)
 			return;
 		end
 	end
-	
+
 	for k, v in next, self.usedFrames do
 		if ( v == frame ) then
 			tinsert(self.frames, frame);
 			tremove(self.usedFrames, k);
 			break;
 		end
-	end	
-end
-
--- Truncated Button code
-
-function TruncatedButton_OnEnter(self)
-	local text = _G[self:GetName().."Text"];
-	if ( text:IsTruncated() ) then
-		GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
-		GameTooltip:SetText(text:GetText());
-		GameTooltip:Show();
 	end
 end
-
-function TruncatedButton_OnLeave(self)
-	if ( GameTooltip:GetOwner() == self ) then
-		GameTooltip:Hide();
-	end
-end
-
 
 -- SquareButton template code
 SQUARE_BUTTON_TEXCOORDS = {
@@ -197,15 +155,15 @@ end
 function CapProgressBar_SetNotches(capBar, count)
 	local barWidth = capBar:GetWidth();
 	local barName = capBar:GetName();
-	
+
 	if ( capBar.notchCount and capBar.notchCount > count ) then
 		for i = count + 1, capBar.notchCount do
 			_G[barName.."Divider"..i]:Hide();
 		end
 	end
-	
+
 	local notchWidth = barWidth / count;
-	
+
 	for i=1, count - 1 do
 		local notch = _G[barName.."Divider"..i];
 		if ( not notch ) then
@@ -221,11 +179,11 @@ function CapProgressBar_Update(capBar, cap1Quantity, cap1Limit, cap2Quantity, ca
 	if ( totalLimit == 0) then
 		return;
 	end
-	
+
 	local barWidth = capBar:GetWidth() - 4;
 	local sizePerPoint = barWidth / totalLimit;
 	local progressWidth = totalQuantity * sizePerPoint;
-	
+
 	local cap1Width, cap2Width;
 	if ( cap2Quantity and cap2Limit ) then
 		cap1Width = min(cap1Limit - cap1Quantity, cap2Limit - cap2Quantity) * sizePerPoint;	--cap1 can't go past the cap2 LFG limit either.
@@ -234,18 +192,18 @@ function CapProgressBar_Update(capBar, cap1Quantity, cap1Limit, cap2Quantity, ca
 		cap1Width = (cap1Limit - cap1Quantity) * sizePerPoint;
 		cap2Width = 0;
 	end
-	
+
 	--Don't let it go past the end.
 	progressWidth = min(progressWidth, barWidth);
 	cap1Width = min(cap1Width, barWidth - progressWidth);
 	cap2Width = min(cap2Width, barWidth - progressWidth - cap1Width);
 	capBar.progress:SetWidth(progressWidth);
-	
+
 	capBar.cap1:SetWidth(cap1Width);
 	capBar.cap2:SetWidth(cap2Width);
-	
+
 	local lastFrame, lastRelativePoint = capBar, "LEFT";
-	
+
 	if ( progressWidth > 0 ) then
 		capBar.progress:Show();
 		capBar.progress:SetPoint("LEFT", lastFrame, lastRelativePoint, 2, 0);
@@ -253,7 +211,7 @@ function CapProgressBar_Update(capBar, cap1Quantity, cap1Limit, cap2Quantity, ca
 	else
 		capBar.progress:Hide();
 	end
-	
+
 	if ( cap1Width > 0 and not hasNoSharedStats) then
 		capBar.cap1:Show();
 		capBar.cap1Marker:Show();
@@ -263,7 +221,7 @@ function CapProgressBar_Update(capBar, cap1Quantity, cap1Limit, cap2Quantity, ca
 		capBar.cap1:Hide();
 		capBar.cap1Marker:Hide();
 	end
-	
+
 	if ( cap2Width > 0 and not hasNoSharedStats) then
 		capBar.cap2:Show();
 		capBar.cap2Marker:Show();
@@ -275,74 +233,39 @@ function CapProgressBar_Update(capBar, cap1Quantity, cap1Limit, cap2Quantity, ca
 	end
 end
 
-function InputScrollFrame_OnLoad(self)
-	local scrollBar = self.ScrollBar;
-	scrollBar:ClearAllPoints();
-	scrollBar:SetPoint("TOPLEFT", self, "TOPRIGHT", -13, -11);
-	scrollBar:SetPoint("BOTTOMLEFT", self, "BOTTOMRIGHT", -13, 9);
-	-- reposition the up and down buttons
-	self.ScrollBar.ScrollDownButton:SetPoint("TOP", scrollBar, "BOTTOM", 0, 4);
-	self.ScrollBar.ScrollUpButton:SetPoint("BOTTOM", scrollBar, "TOP", 0, -4);
-	-- make the scroll bar hideable and force it to start off hidden so positioning calculations can be done
-	-- as soon as it needs to be shown
-	self.scrollBarHideable = 1;
-	scrollBar:Hide();
-	self.EditBox:SetWidth(self:GetWidth() - 18);
-	self.EditBox:SetMaxLetters(self.maxLetters);
-	self.EditBox.Instructions:SetText(self.instructions);
-	self.EditBox.Instructions:SetWidth(self:GetWidth());
-	self.CharCount:SetShown(not self.hideCharCount);
-end
-
-function InputScrollFrame_OnTextChanged(self)
-	local scrollFrame = self:GetParent();
-	ScrollingEdit_OnTextChanged(self, scrollFrame);
-	if ( self:GetText() ~= "" ) then
-		self.Instructions:Hide();
-	else
-		self.Instructions:Show();
-	end
-	scrollFrame.CharCount:SetText(self:GetMaxLetters() - self:GetNumLetters());
-	if ( scrollFrame.ScrollBar:IsShown() ) then
-		scrollFrame.CharCount:SetPoint("BOTTOMRIGHT", -17, 0);
-	else
-		scrollFrame.CharCount:SetPoint("BOTTOMRIGHT", 0, 0);
-	end
-end
-
 --Radio button functions
 function SetCheckButtonIsRadio(button, isRadio)
 	if ( isRadio ) then
 		button:SetNormalTexture("Interface\\Buttons\\UI-RadioButton");
 		button:GetNormalTexture():SetTexCoord(0, 0.25, 0, 1);
-		
+
 		button:SetHighlightTexture("Interface\\Buttons\\UI-RadioButton");
 		button:GetHighlightTexture():SetTexCoord(0.5, 0.75, 0, 1);
-		
+
 		button:SetCheckedTexture("Interface\\Buttons\\UI-RadioButton");
 		button:GetCheckedTexture():SetTexCoord(0.25, 0.5, 0, 1);
-		
+
 		button:SetPushedTexture("Interface\\Buttons\\UI-RadioButton");
 		button:GetPushedTexture():SetTexCoord(0, 0.25, 0, 1);
-		
+
 		button:SetDisabledCheckedTexture("Interface\\Buttons\\UI-RadioButton");
 		button:GetDisabledCheckedTexture():SetTexCoord(0.75, 1, 0, 1);
 	else
 		button:SetNormalTexture("Interface\\Buttons\\UI-CheckBox-Up");
 		button:GetNormalTexture():SetTexCoord(0, 1, 0, 1);
-		
+
 		button:SetHighlightTexture("Interface\\Buttons\\UI-CheckBox-Highlight");
 		button:GetHighlightTexture():SetTexCoord(0, 1, 0, 1);
-		
+
 		button:SetCheckedTexture("Interface\\Buttons\\UI-CheckBox-Check");
 		button:GetCheckedTexture():SetTexCoord(0, 1, 0, 1);
-		
+
 		button:SetPushedTexture("Interface\\Buttons\\UI-CheckBox-Down");
 		button:GetPushedTexture():SetTexCoord(0, 1, 0, 1);
-		
+
 		button:SetDisabledCheckedTexture("Interface\\Buttons\\UI-CheckBox-Check-Disabled");
 		button:GetDisabledCheckedTexture():SetTexCoord(0, 1, 0, 1);
-	end	
+	end
 end
 
 --Inline hyperlinks
@@ -362,7 +285,7 @@ function InlineHyperlinkFrame_OnClick(self, link, text, button)
 		local fixedLink;
 		local _, _, linkType, linkID = string.find(link, "([%a]+):([%d]+)");
 		if ( linkType == "currency" ) then
-			fixedLink = GetCurrencyLink(linkID);
+			fixedLink = C_CurrencyInfo.GetCurrencyLink(linkID);
 		end
 
 		if ( fixedLink ) then
@@ -371,4 +294,322 @@ function InlineHyperlinkFrame_OnClick(self, link, text, button)
 		end
 	end
 	SetItemRef(link, text, button);
+end
+
+CurrencyTemplateMixin = {};
+
+function CurrencyTemplateMixin:SetCurrencyFromID(currencyID, amount, formatString, colorCode)
+	local currencyString = GetCurrencyString(currencyID, amount, colorCode, self.abbreviate);
+	if formatString then
+		self:SetText(formatString:format(currencyString));
+	else
+		self:SetText(currencyString);
+	end
+	
+	self.currencyID = currencyID;
+	self.amount = amount;
+	self.formatString = formatString;
+	self.colorCode = colorCode;
+end
+
+function CurrencyTemplateMixin:SetTooltipAnchor(tooltipAnchor)
+	self.tooltipAnchor = tooltipAnchor;
+end
+
+function CurrencyTemplateMixin:SetAbbreviate(abbreviate)
+	self.abbreviate = abbreviate;
+end
+
+function CurrencyTemplateMixin:Refresh()
+	-- without an override amount this currency is eligible for a refresh
+	if not self.amount then
+		local overrideAmount = nil;
+		self:SetCurrencyFromID(self.currencyID, overrideAmount, self.formatString, self.colorCode);
+	end
+end
+
+function CurrencyTemplateMixin:OnEnter()
+	if self.tooltipAnchor and self.currencyID then
+		self:SetScript("OnUpdate", self.OnUpdate);
+	end
+end
+
+function CurrencyTemplateMixin:OnLeave()
+	self:SetScript("OnUpdate", nil);
+	GameTooltip:Hide();
+end
+
+function CurrencyTemplateMixin:OnUpdate()
+	if self.Text:IsMouseOver() then
+		GameTooltip:SetOwner(self, self.tooltipAnchor);
+		GameTooltip:SetCurrencyByID(self.currencyID);
+	elseif GameTooltip:GetOwner() == self then
+		GameTooltip:Hide();
+	end
+end
+
+UIExpandingButtonMixin = {};
+
+function UIExpandingButtonMixin:SetUp(expanded, expansionDirection)
+	self.expansionDirection = expansionDirection;
+	self.currentlyExpanded = expanded;
+	self:Update();
+end
+
+function UIExpandingButtonMixin:SetLabel(label)
+	self.Label:SetText(label);
+end
+
+local function GetOppositeDirection(direction)
+	if (direction == "RIGHT") then
+		return "LEFT";
+	else
+		return "RIGHT";
+	end
+end
+
+function UIExpandingButtonMixin:SetExpanded(expanded)
+	self.currentlyExpanded = expanded;
+	self:Update();
+end
+
+function UIExpandingButtonMixin:IsCurrentlyExpanded()
+	return self.currentlyExpanded;
+end
+
+function UIExpandingButtonMixin:Update(override)
+	if (self.currentlyExpanded == nil or not self.expansionDirection) then
+		error("The button must be set up before update.");
+		return;
+	end
+
+	if (override ~= nil) then
+		self.currentlyExpanded = override;
+	end
+
+	local direction = self.currentlyExpanded and GetOppositeDirection(self.expansionDirection) or self.expansionDirection;
+
+	SquareButton_SetIcon(self, direction);
+
+	if (self.callback) then
+		self.callback(self, self.currentlyExpanded);
+	end
+end
+
+function UIExpandingButtonMixin:RegisterCallback(callback)
+	self.callback = callback;
+end
+
+function UIExpandingButtonMixin:OnClick(button, down)
+	self.currentlyExpanded = not self.currentlyExpanded;
+	self:Update();
+end
+
+TalentRankDisplayMixin = { };
+
+function TalentRankDisplayMixin:SetValues(currentRank, maxRank, isDisabled, isAvailable)
+	self.Text:SetFormattedText(GENERIC_FRACTION_STRING, currentRank, maxRank);
+	local atlas, textColor;
+	if isDisabled then
+		atlas = "orderhalltalents-rankborder";
+		textColor = DISABLED_FONT_COLOR;
+	elseif isAvailable and currentRank < maxRank then
+		atlas = "orderhalltalents-rankborder-green";
+		textColor = GREEN_FONT_COLOR;
+	else
+		atlas = "orderhalltalents-rankborder-yellow";
+		textColor = YELLOW_FONT_COLOR;
+	end
+
+	local useAtlasSize = true;
+	self.Background:SetAtlas(atlas, true);
+	self.Text:SetTextColor(textColor:GetRGB());
+end
+
+ButtonWithDisableMixin = {};
+
+function ButtonWithDisableMixin:SetDisableTooltip(tooltipTitle, tooltipText)
+	self.disableTooltipTitle = tooltipTitle;
+	self.disableTooltipText = tooltipText;
+	self:SetEnabled(tooltipTitle == nil);
+end
+
+function ButtonWithDisableMixin:OnEnter()
+	if self.disableTooltipTitle and not self:IsEnabled() then
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
+
+		local wrap = true;
+		GameTooltip_SetTitle(GameTooltip, self.disableTooltipTitle, RED_FONT_COLOR, wrap);
+
+		if self.disableTooltipText then
+			GameTooltip_AddNormalLine(GameTooltip, self.disableTooltipText, wrap);
+		end
+
+		GameTooltip:Show();
+	end
+end
+
+CurrencyDisplayMixin = CreateFromMixins(CurrencyTemplateMixin);
+
+-- currencies: An array of currencyInfo
+-- currencyInfo: either a currencyID, or an array with { currencyID, overrideAmount, colorCode }, or a table with { currencyID = 123, amount = 45 }
+function CurrencyDisplayMixin:SetCurrencies(currencies, formatString)
+	if #currencies == 1 then
+		local currency = currencies[1];
+		if type(currency) == "table" then
+			if currency.currencyID and currency.amount then
+				self:SetCurrencyFromID(currency.currencyID, currency.amount, formatString);
+			else
+				local currencyID, overrideAmount, colorCode = unpack(currency);
+				self:SetCurrencyFromID(currencyID, overrideAmount, formatString, colorCode);
+			end
+		else
+			self:SetCurrencyFromID(currency);
+		end
+
+		return;
+	end
+
+	local text = GetCurrenciesString(currencies);
+	if formatString then
+		self:SetText(formatString:format(text));
+	else
+		self:SetText(text);
+	end
+end
+
+function CurrencyDisplayMixin:SetText(text)
+	self.Text:SetText(text);
+end
+
+function CurrencyDisplayMixin:SetTextAnchorPoint(anchorPoint)
+	self.Text:ClearAllPoints();
+	self.Text:SetPoint(anchorPoint);
+end
+
+CurrencyDisplayGroupMixin = {};
+
+function CurrencyDisplayGroupMixin:OnLoad()
+	self.currencyFramePool = CreateFramePool("FRAME", self, "CurrencyDisplayTemplate");
+end
+
+-- Defaults to a TOPRIGHT configuration.
+function CurrencyDisplayGroupMixin:SetCurrencies(currencies, initFunction, initialAnchor, gridLayout, tooltipAnchor, abbreviate, reverseOrder)
+	self.currencyFramePool:ReleaseAll();
+
+	local function FactoryFunction(index)
+		local currencyFrame = self.currencyFramePool:Acquire();
+		local tIndex = index;
+		if reverseOrder then
+			tIndex = #currencies + 1 - index;
+		end
+		local currencyInfo = currencies[tIndex];
+
+		currencyFrame:SetTooltipAnchor(tooltipAnchor);
+		currencyFrame:SetAbbreviate(abbreviate);
+
+		if type(currency) == "table" then
+			currencyFrame:SetCurrencyFromID(unpack(currencyInfo));
+		else
+			currencyFrame:SetCurrencyFromID(currencyInfo);
+		end
+
+		if initFunction then
+			initFunction(currencyFrame);
+		end
+
+		currencyFrame:Show();
+
+		return currencyFrame;
+	end
+
+	local initialAnchor = initialAnchor or AnchorUtil.CreateAnchor("TOPRIGHT", self, "TOPRIGHT");
+	local layout = gridLayout or AnchorUtil.CreateGridLayout(GridLayoutMixin.Direction.TopRightToBottomLeft);
+	AnchorUtil.GridLayoutFactoryByCount(FactoryFunction, #currencies, initialAnchor, layout);
+
+	self:MarkDirty();
+end
+
+function CurrencyDisplayGroupMixin:Refresh()
+	for currencyFrame in self.currencyFramePool:EnumerateActive() do
+		currencyFrame:Refresh();
+	end
+end
+
+CurrencyHorizontalLayoutFrameMixin = { };
+
+function CurrencyHorizontalLayoutFrameMixin:Clear()
+	if self.quantityPool then
+		self.quantityPool:ReleaseAll();
+	end
+	if self.iconPool then
+		self.iconPool:ReleaseAll();
+	end
+	self.nextLayoutIndex = nil;
+end
+
+function CurrencyHorizontalLayoutFrameMixin:AddToLayout(region)
+	if not self.nextLayoutIndex then
+		self.nextLayoutIndex = 1;
+	end
+	region.layoutIndex = self.nextLayoutIndex;
+	self.nextLayoutIndex = self.nextLayoutIndex + 1;
+	region:Show();
+end
+
+function CurrencyHorizontalLayoutFrameMixin:GetQuantityFontString()
+	if not self.quantityPool then
+		self.quantityPool = CreateFontStringPool(self, "ARTWORK", 0, (self.quantityFontObject or "GameFontHighlight"));
+	end
+	local fontString = self.quantityPool:Acquire();
+	self:AddToLayout(fontString);
+	return fontString;
+end
+
+function CurrencyHorizontalLayoutFrameMixin:GetIconFrame()
+	if not self.iconPool then
+		self.iconPool = CreateFramePool("FRAME", self, "CurrencyLayoutFrameIconTemplate");
+	end
+	local frame = self.iconPool:Acquire();
+	self:AddToLayout(frame);
+	return frame;
+end
+
+function CurrencyHorizontalLayoutFrameMixin:CreateLabel(text, color, fontObject, spacing)
+	if self.Label then
+		return;
+	end
+
+	local label = self:CreateFontString(nil, "ARTWORK", fontObject or "GameFontHighlight");
+	self.Label = label;
+	label.layoutIndex = 0;
+	label.rightPadding = spacing;
+	label:SetHeight(self.fixedHeight);
+	label:SetText(text);
+	color = color or HIGHLIGHT_FONT_COLOR;
+	label:SetTextColor(color:GetRGB());
+end
+
+function CurrencyHorizontalLayoutFrameMixin:AddCurrency(currencyID, overrideAmount, color)
+	local currencyInfo = C_CurrencyInfo.GetCurrencyInfo(currencyID);
+	if currencyInfo then
+		local height = self.fixedHeight;
+		-- quantity
+		local fontString = self:GetQuantityFontString();
+		fontString:SetHeight(height);
+		local amountString = BreakUpLargeNumbers(overrideAmount or currencyInfo.quantity);
+		fontString:SetText(amountString);
+		color = color or HIGHLIGHT_FONT_COLOR;
+		fontString:SetTextColor(color:GetRGB());
+		-- icon
+		local frame = self:GetIconFrame();
+		frame:SetSize(height, height);
+		frame.Icon:SetTexture(currencyInfo.iconFileID);
+		frame.id = currencyID;
+		-- spacing
+		fontString.rightPadding = self.quantitySpacing;
+		if fontString.layoutIndex > 1  then
+			fontString.leftPadding = self.currencySpacing;
+		end
+	end
 end

@@ -20,12 +20,12 @@ function BlackMarketFrame_Show()
 	if ( not BlackMarketFrame:IsShown() ) then
 		C_BlackMarket.Close();
 	end
-	PlaySound("AuctionWindowOpen")
+	PlaySound(SOUNDKIT.AUCTION_WINDOW_OPEN)
 end
 
 function BlackMarketFrame_Hide()
 	HideUIPanel(BlackMarketFrame);
-	PlaySound("AuctionWindowClose");
+	PlaySound(SOUNDKIT.AUCTION_WINDOW_CLOSE);
 end
 
 function BlackMarketFrame_OnLoad(self)
@@ -74,12 +74,12 @@ function BlackMarketFrame_OnShow(self)
 	end
 
 	BlackMarketFrame.BidButton:Disable();
-	PlaySound("AuctionWindowOpen");
+	PlaySound(SOUNDKIT.AUCTION_WINDOW_OPEN);
 end
 
 function BlackMarketFrame_OnHide(self)
 	C_BlackMarket.Close();
-	PlaySound("AuctionWindowClose");
+	PlaySound(SOUNDKIT.AUCTION_WINDOW_CLOSE);
 end
 
 function BlackMarketFrame_UpdateHotItem(self)
@@ -96,7 +96,7 @@ function BlackMarketFrame_UpdateHotItem(self)
 
 		SetItemButtonQuality(self.HotDeal.Item, quality, link);
 
-		if (quality >= LE_ITEM_QUALITY_COMMON and BAG_ITEM_QUALITY_COLORS[quality]) then
+		if (quality >= Enum.ItemQuality.Common and BAG_ITEM_QUALITY_COLORS[quality]) then
 			self.HotDeal.Name:SetTextColor(BAG_ITEM_QUALITY_COLORS[quality].r, BAG_ITEM_QUALITY_COLORS[quality].g, BAG_ITEM_QUALITY_COLORS[quality].b);
 		else
 			self.HotDeal.Name:SetTextColor(1.0, 0.82, 0);
@@ -162,7 +162,7 @@ function BlackMarketScrollFrame_Update()
 
 				SetItemButtonQuality(button.Item, quality, link);
 
-				if (quality and quality >= LE_ITEM_QUALITY_COMMON and BAG_ITEM_QUALITY_COLORS[quality]) then
+				if (quality and quality >= Enum.ItemQuality.Common and BAG_ITEM_QUALITY_COLORS[quality]) then
 					button.Name:SetTextColor(BAG_ITEM_QUALITY_COLORS[quality].r, BAG_ITEM_QUALITY_COLORS[quality].g, BAG_ITEM_QUALITY_COLORS[quality].b);
 				else
 					button.Name:SetTextColor(1.0, 0.82, 0);

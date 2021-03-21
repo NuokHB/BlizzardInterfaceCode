@@ -1,4 +1,10 @@
 
+local type = type;
+local setfenv = setfenv;
+local forceinsecure = forceinsecure;
+local securecall = securecall;
+local scrub = scrub;
+
 --[[
 abilityInfo should be defined with the following functions:
 {
@@ -45,9 +51,6 @@ function SharedPetBattleAbilityTooltip_GetInfoTable()
 end
 
 function SharedPetBattleAbilityTooltip_OnLoad(self)
-	self:SetBackdropBorderColor(TOOLTIP_DEFAULT_COLOR.r, TOOLTIP_DEFAULT_COLOR.g, TOOLTIP_DEFAULT_COLOR.b);
-	self:SetBackdropColor(TOOLTIP_DEFAULT_BACKGROUND_COLOR.r, TOOLTIP_DEFAULT_BACKGROUND_COLOR.g, TOOLTIP_DEFAULT_BACKGROUND_COLOR.b);
-
 	self.strongAgainstTextures = { self.StrongAgainstType1 };
 	self.weakAgainstTextures = { self.WeakAgainstType1 };
 end
@@ -437,13 +440,13 @@ do
 		if ( finalMulti > 1 ) then 
 			output = GREEN_FONT_COLOR_CODE..math.floor(baseHeal * finalMulti)..FONT_COLOR_CODE_CLOSE;
 			if (ENABLE_COLORBLIND_MODE == "1") then
-				output = output.."|Tinterface\petbattles\battlebar-abilitybadge-strong-small:0|t";
+				output = output.."|Tinterface\\petbattles\\battlebar-abilitybadge-strong-small:0|t";
 			end
 			return output;
 		elseif( finalMulti < 1 ) then 
 			output = RED_FONT_COLOR_CODE..math.floor(baseHeal * finalMulti)..FONT_COLOR_CODE_CLOSE;
 			if (ENABLE_COLORBLIND_MODE == "1") then
-				output = output.."|Tinterface\petbattles\battlebar-abilitybadge-weak-small:0|t";
+				output = output.."|Tinterface\\petbattles\\battlebar-abilitybadge-weak-small:0|t";
 			end
 			return output;
 		end
@@ -528,9 +531,12 @@ do
 	
 	--Don't allow designers to accidentally change the environment
 	local safeEnv = {};
-	setmetatable(safeEnv, { __index = parserEnv, __newindex = function() end });
+	setmetatable(safeEnv, { __index = parserEnv, __newindex = function() end, __metatable = false });
 
-	function SharedPetAbilityTooltip_ParseExpression(expression)
+	local function SharedPetAbilityTooltip_ParseExpressionInsecure(expression)
+		-- Make sure we're not using loadstring securely.
+		forceinsecure();
+
 		--Load the expression, chopping off the [] on the side.
 		local expr = loadstring("return ("..string.sub(expression, 2, -2)..")");
 		if ( expr ) then
@@ -554,6 +560,16 @@ do
 		else
 			return "PARSING ERROR";
 		end
+	end
+
+	function SharedPetAbilityTooltip_ParseExpression(expression)
+		local expressionResult = scrub(securecall(SharedPetAbilityTooltip_ParseExpressionInsecure, expression));
+		local expressionResultType = type(expressionResult);
+		if (expressionResultType == "number") or (expressionResultType == "string") or (expressionResultType == "boolean") then
+			return expressionResult;
+		end
+		
+		return "RESULT TYPE ERROR";
 	end
 end
 

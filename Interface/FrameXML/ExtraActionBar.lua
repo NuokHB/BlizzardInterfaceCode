@@ -13,22 +13,24 @@ function ExtraActionBar_Update()
 		bar:Show();
 		local texture = GetOverrideBarSkin() or DefaultExtraActionStyle;
 		bar.button.style:SetTexture(texture);
-		ActionButton_UpdateUsable(bar.button);
-		UIParent_ManageFramePositions();
+		bar.button:UpdateUsable();
+		ExtraAbilityContainer:AddFrame(bar, ExtraActionButtonPriority);
 		bar.outro:Stop();
 		bar.intro:Play();
 	elseif( bar:IsShown() ) then
 		bar.intro:Stop();
 		bar.outro:Play();
+	else
+		ExtraAbilityContainer:RemoveFrame(self);
 	end
-end
-
-function ExtraActionBar_OnHide (self)
-	UIParent_ManageFramePositions();
 end
 
 
 function ExtraActionButtonKey(id, isDown)
+	if not HasExtraActionBar() then
+		return;
+	end
+
 	local button = _G["ExtraActionButton"..id];
 	
 	if isDown then
@@ -37,14 +39,14 @@ function ExtraActionButtonKey(id, isDown)
 		end
 		if (GetCVarBool("ActionButtonUseKeyDown")) then
 			SecureActionButton_OnClick(button, "LeftButton");
-			ActionButton_UpdateState(button);
+			button:UpdateState();
 		end
 	else
 		if ( button:GetButtonState() == "PUSHED" ) then
 			button:SetButtonState("NORMAL");
 			if (not GetCVarBool("ActionButtonUseKeyDown")) then
 				SecureActionButton_OnClick(button, "LeftButton");
-				ActionButton_UpdateState(button);
+				button:UpdateState();
 			end
 		end
 	end

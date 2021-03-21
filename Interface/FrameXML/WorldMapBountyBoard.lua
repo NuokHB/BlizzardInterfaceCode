@@ -8,6 +8,8 @@ function WorldMapBountyBoardMixin:OnLoad()
 	self.BountyName:SetFontObjectsToTry(Game13Font_o1, Game12Font_o1, Game11Font_o1);
 
 	self.minimumTabsToDisplay = 3;
+	self.maps = {};
+	self.highestMapInfo = {};
 end
 
 function WorldMapBountyBoardMixin:OnEvent(event, ...)
@@ -24,25 +26,33 @@ function WorldMapBountyBoardMixin:OnShow()
 	end
 end
 
-function WorldMapBountyBoardMixin:SetMapAreaID(mapAreaID)
-	if self.mapAreaID ~= mapAreaID then
-		self.mapAreaID = mapAreaID;
+function WorldMapBountyBoardMixin:SetMapAreaID(mapID)
+	if self.mapID ~= mapID then
+		self.mapID = mapID;
 		self:Refresh();
 	end
+end
+
+function WorldMapBountyBoardMixin:GetMapID()
+	if self:GetParent().GetMapID then
+		return self:GetParent():GetMapID();
+	else
+		return self.mapID;
+	end
+end
+
+function WorldMapBountyBoardMixin:GoToMap(mapID)
+	self:GetParent():SetMapID(mapID);
 end
 
 function WorldMapBountyBoardMixin:GetDisplayLocation()
 	return self.displayLocation;
 end
 
-function WorldMapBountyBoardMixin:SetSelectedBountyChangedCallback(selectedBountyChangedCallback)
-	self.selectedBountyChangedCallback = selectedBountyChangedCallback;
-end
-
 function WorldMapBountyBoardMixin:IsWorldQuestCriteriaForSelectedBounty(questID)
 	if self.bounties and self.selectedBountyIndex then
 		local bounty = self.bounties[self.selectedBountyIndex];
-		if bounty and IsQuestCriteriaForBounty(questID, bounty.questID) then
+		if bounty and C_QuestLog.IsQuestCriteriaForBounty(questID, bounty.questID) then
 			return true;
 		end
 	end
@@ -50,7 +60,8 @@ function WorldMapBountyBoardMixin:IsWorldQuestCriteriaForSelectedBounty(questID)
 end
 
 function WorldMapBountyBoardMixin:Clear()
-	self.selectedBountyIndex = nil;
+	local skipRefresh = true;
+	self:SetSelectedBountyIndex(nil, skipRefresh);
 	self:Hide();
 end
 
@@ -58,23 +69,37 @@ WORLD_MAP_BOUNTY_BOARD_LOCK_TYPE_NONE = 1;
 WORLD_MAP_BOUNTY_BOARD_LOCK_TYPE_BY_QUEST = 2;
 WORLD_MAP_BOUNTY_BOARD_LOCK_TYPE_NO_BOUNTIES = 3;
 
+function WorldMapBountyBoardMixin:HideHelpTips()
+	HelpTip:Hide(self, BOUNTY_TUTORIAL_INTRO);
+	if self.firstCompletedTab then
+		HelpTip:Hide(self.firstCompletedTab, BOUNTY_TUTORIAL_BOUNTY_FINISHED);
+	end
+end
+
 function WorldMapBountyBoardMixin:Refresh()
 	assert(not self.isRefreshing);
 	self.isRefreshing = true;
 
+	self:HideHelpTips();
+
 	self.firstCompletedTab = nil;
-	self.TutorialBox:Hide();
 
 	self.bountyTabPool:ReleaseAll();
 	self.bountyObjectivePool:ReleaseAll();
 
-	if not self.mapAreaID then
+	local mapID = self:GetMapID();
+	if not mapID then
 		self:Clear();
 		self.isRefreshing = false;
 		return;
 	end
 
-	self.bounties, self.displayLocation, self.lockedQuestID = GetQuestBountyInfoForMapID(self.mapAreaID, self.bounties);
+	self.displayLocation, self.lockedQuestID, self.bountySetID = C_QuestLog.GetBountySetInfoForMapID(mapID);
+	self.bounties = C_QuestLog.GetBountiesForMapID(mapID) or {};
+
+	if self.lockedQuestID and not C_QuestLog.IsOnQuest(self.lockedQuestID) then
+		self.lockedQuestID = nil;
+	end
 
 	if not self.displayLocation then
 		self:Clear();
@@ -86,16 +111,18 @@ function WorldMapBountyBoardMixin:Refresh()
 		self:SetLockedType(WORLD_MAP_BOUNTY_BOARD_LOCK_TYPE_BY_QUEST);
 	elseif #self.bounties == 0 then
 		self:SetLockedType(WORLD_MAP_BOUNTY_BOARD_LOCK_TYPE_NO_BOUNTIES);
-
-		self.selectedBountyIndex = nil;
-
-		self:RefreshBountyTabs();
+		self:SetSelectedBountyIndex(nil);
 	else
 		self:SetLockedType(WORLD_MAP_BOUNTY_BOARD_LOCK_TYPE_NONE);
-		self.selectedBountyIndex = self.bounties[self.selectedBountyIndex] and self.selectedBountyIndex or 1;
+		self:SetSelectedBountyIndex(self.bounties[self.selectedBountyIndex] and self.selectedBountyIndex or 1);
+	end
 
-		self:RefreshBountyTabs();
-		self:RefreshSelectedBounty();
+	-- TEMP
+	if self:GetParent().SetOverlayFrameLocation then
+		local bountyBoardLocation = self:GetDisplayLocation();
+		if bountyBoardLocation then
+			self:GetParent():SetOverlayFrameLocation(self, bountyBoardLocation);
+		end
 	end
 
 	self:Show();
@@ -142,13 +169,13 @@ function WorldMapBountyBoardMixin:RefreshBountyTabs()
 		local tab = self.bountyTabPool:Acquire();
 		local selected = self.selectedBountyIndex == bountyIndex;
 		tab:SetNormalAtlas(selected and "worldquest-tracker-ring-selected" or "worldquest-tracker-ring");
-		if selected then 
+		if selected then
 			tab:SetHighlightTexture(nil);
 		else
 			tab:SetHighlightAtlas("worldquest-tracker-ring");
 			tab:GetHighlightTexture():SetAlpha(0.4);
-		end		
-		if IsQuestComplete(bounty.questID) then
+		end
+		if C_QuestLog.IsComplete(bounty.questID) then
 			tab.CheckMark:Show();
 			if not self.firstCompletedTab then
 				self.firstCompletedTab = tab;
@@ -156,7 +183,7 @@ function WorldMapBountyBoardMixin:RefreshBountyTabs()
 		else
 			tab.CheckMark:Hide();
 		end
-		
+
 		tab.Icon:SetTexture(bounty.icon);
 		tab.Icon:Show();
 		tab.EmptyIcon:Hide();
@@ -192,15 +219,13 @@ function WorldMapBountyBoardMixin:RefreshSelectedBounty()
 
 	if self.selectedBountyIndex then
 		local bountyData = self.bounties[self.selectedBountyIndex];
-		local questIndex = GetQuestLogIndexByID(bountyData.questID);
-		if questIndex > 0 then
-			local title, level, suggestedGroup, isHeader, isCollapsed, isComplete, frequency, questID, startEvent, displayQuestID, isOnMap, hasLocalPOI, isTask, isBounty, isStory = GetQuestLogTitle(questIndex);
-			if title then
-				self.BountyName:SetText(title);
+		local title = QuestUtils_GetQuestName(bountyData.questID);
+		if title then
+			self.BountyName:SetText(title);
 
-				self:RefreshSelectedBountyObjectives(bountyData);
-				return;
-			end
+			self:InvalidateMapCache();
+			self:RefreshSelectedBountyObjectives(bountyData);
+			return;
 		end
 	end
 
@@ -264,14 +289,21 @@ function WorldMapBountyBoardMixin:CalculateBountySubObjectives(bountyData)
 	return numCompleted, numTotal;
 end
 
-function WorldMapBountyBoardMixin:SetSelectedBountyIndex(selectedBountyIndex)
+function WorldMapBountyBoardMixin:SetSelectedBountyIndex(selectedBountyIndex, skipRefresh)
 	self.selectedBountyIndex = selectedBountyIndex;
-	PlaySound("UI_WorldQuest_Map_Select");
-	self:RefreshBountyTabs();
-	self:RefreshSelectedBounty();
-	if self.selectedBountyChangedCallback then
-		self.selectedBountyChangedCallback(self);
+	if not skipRefresh then
+		self:RefreshBountyTabs();
+		self:RefreshSelectedBounty();
 	end
+
+	local bountyQuestID;
+	if self.selectedBountyIndex then
+		local bounty = self.bounties[self.selectedBountyIndex];
+		if bounty then
+			bountyQuestID = bounty.questID;
+		end
+	end
+	self:GetParent():TriggerEvent("SetBountyQuestID", bountyQuestID);
 end
 
 function WorldMapBountyBoardMixin:GetSelectedBountyIndex()
@@ -283,7 +315,7 @@ local function AddObjectives(questID, numObjectives)
 		local objectiveText, objectiveType, finished = GetQuestObjectiveInfo(questID, objectiveIndex, false);
 		if objectiveText and #objectiveText > 0 then
 			local color = finished and GRAY_FONT_COLOR or HIGHLIGHT_FONT_COLOR;
-			WorldMapTooltip:AddLine(QUEST_DASH .. objectiveText, color.r, color.g, color.b, true);
+			GameTooltip:AddLine(QUEST_DASH .. objectiveText, color.r, color.g, color.b, true);
 		end
 	end
 end
@@ -292,49 +324,54 @@ function WorldMapBountyBoardMixin:ShowBountyTooltip(bountyIndex)
 	local bountyData = self.bounties[bountyIndex];
 	self:SetTooltipOwner();
 
-	local questIndex = GetQuestLogIndexByID(bountyData.questID);
-	local title, level, suggestedGroup, isHeader, isCollapsed, isComplete, frequency, questID, startEvent, displayQuestID, isOnMap, hasLocalPOI, isTask, isStory = GetQuestLogTitle(questIndex);
+	local questIndex = C_QuestLog.GetLogIndexForQuestID(bountyData.questID);
+	local title = C_QuestLog.GetTitleForLogIndex(questIndex);
 	if title then
-		WorldMapTooltip:SetText(title, HIGHLIGHT_FONT_COLOR:GetRGB());
-
-		WorldMap_AddQuestTimeToTooltip(bountyData.questID);
+		GameTooltip_SetTitle(GameTooltip, title);
+		GameTooltip_AddQuestTimeToTooltip(GameTooltip, bountyData.questID);
 
 		local _, questDescription = GetQuestLogQuestText(questIndex);
-		WorldMapTooltip:AddLine(questDescription, NORMAL_FONT_COLOR.r, NORMAL_FONT_COLOR.g, NORMAL_FONT_COLOR.b, true);
+		GameTooltip:AddLine(questDescription, NORMAL_FONT_COLOR.r, NORMAL_FONT_COLOR.g, NORMAL_FONT_COLOR.b, true);
 
 		AddObjectives(bountyData.questID, bountyData.numObjectives);
 
-		WorldMap_AddQuestRewardsToTooltip(bountyData.questID);
-		WorldMapTooltip:Show();
+		if bountyData.turninRequirementText then
+			GameTooltip:AddLine(bountyData.turninRequirementText, RED_FONT_COLOR.r, RED_FONT_COLOR.g, RED_FONT_COLOR.b, true);
+		end
+
+		GameTooltip_AddQuestRewardsToTooltip(GameTooltip, bountyData.questID, TOOLTIP_QUEST_REWARDS_STYLE_EMISSARY_REWARD);
+		GameTooltip_SetTooltipWaitingForData(GameTooltip, false);
 	else
-		WorldMapTooltip:SetText(RETRIEVING_DATA, RED_FONT_COLOR:GetRGB());
-		WorldMapTooltip:Show();
+		GameTooltip_SetTitle(GameTooltip, RETRIEVING_DATA, RED_FONT_COLOR);
+		GameTooltip_SetTooltipWaitingForData(GameTooltip, true);
 	end
+
+	GameTooltip:Show();
 end
 
 function WorldMapBountyBoardMixin:SetTooltipOwner()
 	local x = self:GetRight();
 	if x >= GetScreenWidth() / 2 then
-		WorldMapTooltip:SetOwner(self, "ANCHOR_LEFT", -100, -50);
+		GameTooltip:SetOwner(self, "ANCHOR_LEFT", -100, -50);
 	else
-		WorldMapTooltip:SetOwner(self, "ANCHOR_RIGHT", 0, -50);
-	end	
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT", 0, -50);
+	end
 end
 
 function WorldMapBountyBoardMixin:ShowLockedByQuestTooltip()
-	local questIndex = GetQuestLogIndexByID(self.lockedQuestID);
-	local title, level, suggestedGroup, isHeader, isCollapsed, isComplete, frequency, questID, startEvent, displayQuestID, isOnMap, hasLocalPOI, isTask, isStory = GetQuestLogTitle(questIndex);
+	local questIndex = C_QuestLog.GetLogIndexForQuestID(self.lockedQuestID);
+	local title = C_QuestLog.GetTitleForLogIndex(questIndex);
 	if title then
 		self:SetTooltipOwner();
 
-		WorldMapTooltip:SetText(BOUNTY_BOARD_LOCKED_TITLE, HIGHLIGHT_FONT_COLOR:GetRGB());
+		GameTooltip:SetText(BOUNTY_BOARD_LOCKED_TITLE, HIGHLIGHT_FONT_COLOR:GetRGB());
 
 		local _, questDescription = GetQuestLogQuestText(questIndex);
-		WorldMapTooltip:AddLine(questDescription, NORMAL_FONT_COLOR.r, NORMAL_FONT_COLOR.g, NORMAL_FONT_COLOR.b, true);
+		GameTooltip:AddLine(questDescription, NORMAL_FONT_COLOR.r, NORMAL_FONT_COLOR.g, NORMAL_FONT_COLOR.b, true);
 
 		AddObjectives(self.lockedQuestID, GetNumQuestLeaderBoards(questIndex));
 
-		WorldMapTooltip:Show();
+		GameTooltip:Show();
 	end
 end
 
@@ -348,9 +385,9 @@ function WorldMapBountyBoardMixin:ShowLockedByNoBountiesTooltip(bountyIndex)
 	else
 		tooltipText = BOUNTY_BOARD_NO_BOUNTIES;
 	end
-	WorldMapTooltip:SetText(tooltipText, NORMAL_FONT_COLOR.r, NORMAL_FONT_COLOR.g, NORMAL_FONT_COLOR.b, true);
+	GameTooltip:SetText(tooltipText, NORMAL_FONT_COLOR.r, NORMAL_FONT_COLOR.g, NORMAL_FONT_COLOR.b, true);
 
-	WorldMapTooltip:Show();
+	GameTooltip:Show();
 end
 
 function WorldMapBountyBoardMixin:OnEnter()
@@ -363,10 +400,11 @@ function WorldMapBountyBoardMixin:OnEnter()
 	elseif self.lockedType == WORLD_MAP_BOUNTY_BOARD_LOCK_TYPE_NO_BOUNTIES then
 		self:ShowLockedByNoBountiesTooltip(nil);
 	end
+	self.UpdateTooltip = self.OnEnter;
 end
 
 function WorldMapBountyBoardMixin:OnLeave()
-	WorldMapTooltip:Hide();
+	GameTooltip:Hide();
 end
 
 function WorldMapBountyBoardMixin:OnTabEnter(tab)
@@ -375,6 +413,7 @@ function WorldMapBountyBoardMixin:OnTabEnter(tab)
 	else
 		self:ShowBountyTooltip(tab.bountyIndex);
 	end
+	self.UpdateTooltip = function() self:OnTabEnter(tab) end;
 end
 
 function WorldMapBountyBoardMixin:OnTabLeave(tab)
@@ -383,94 +422,118 @@ end
 
 function WorldMapBountyBoardMixin:OnTabClick(tab)
 	if not tab.isEmpty then
+		local isNewTab = self:GetSelectedBountyIndex() ~= tab.bountyIndex;
+		if isNewTab then
+			self:InvalidateMapCache();
+		end
+		PlaySound(SOUNDKIT.UI_WORLDQUEST_MAP_SELECT);
 		self:SetSelectedBountyIndex(tab.bountyIndex);
-		self:FindBestMapForSelectedBounty();
+		self:SetNextMapForSelectedBounty(isNewTab);
 	end
 end
 
-function WorldMapBountyBoardMixin:FindBestMapForSelectedBounty()
-	local _, continentID = GetCurrentMapContinent();
-	local continentMaps =  { GetMapSubzones(continentID) };
+function WorldMapBountyBoardMixin:InvalidateMapCache()
+	self.cachedMapInfo = nil;
+end
 
-	-- move current map to 1st position
-	for i = 1, #continentMaps, 2 do
-		if continentMaps[i] == self.mapAreaID then
-			continentMaps[1], continentMaps[i] = continentMaps[i], continentMaps[1];
-			break;
-		end
-	end
-
-	for i = 1, #continentMaps, 2 do
-		local taskInfo = C_TaskQuest.GetQuestsForPlayerByMapID(continentMaps[i], continentID);
-		for _, info  in ipairs(taskInfo) do
-			if QuestMapFrame_IsQuestWorldQuest(info.questId) then
-				if self:IsWorldQuestCriteriaForSelectedBounty(info.questId) then
-					SetMapByID(continentMaps[i]);
-					return;
-				end
+function WorldMapBountyBoardMixin:CalculateNumActiveWorldQuestsForSelectedBountyByMap(mapID)
+	local numQuests = 0;
+	local taskInfo = C_TaskQuest.GetQuestsForPlayerByMapID(mapID);
+	for i, info in ipairs(taskInfo) do
+		if QuestUtils_IsQuestWorldQuest(info.questId) and info.mapID == mapID then -- ignore worlds quests that are on surrounding maps but viewable from this map
+			if self:IsWorldQuestCriteriaForSelectedBounty(info.questId) then
+				numQuests = numQuests + 1;
 			end
 		end
 	end
+	return numQuests;
+end
+
+function WorldMapBountyBoardMixin:CacheMapsForSelectionBounty()
+	if self.cachedMapInfo then
+		return;
+	end
+
+	self.cachedMapInfo = {};
+	local mapID = self:GetMapID();
+	local bountySetMaps = MapUtil.GetBountySetMaps(self.bountySetID);
+	for i, zoneMapID in ipairs(bountySetMaps) do
+		local numQuests = self:CalculateNumActiveWorldQuestsForSelectedBountyByMap(zoneMapID);
+		if numQuests > 0 then
+			table.insert(self.cachedMapInfo, { mapID = zoneMapID, count = numQuests });
+		end
+	end
+	table.sort(self.cachedMapInfo, function(left, right) return right.count < left.count end);
+end
+
+function WorldMapBountyBoardMixin:SetNextMapForSelectedBounty(isNewTab)
+	self:CacheMapsForSelectionBounty();
+
+	if #self.cachedMapInfo == 0 then
+		return;
+	end
+
+	local mapIndex = 1;
+	local mapID = self:GetMapID();
+	for i, cachedMapInfo in ipairs(self.cachedMapInfo) do
+		if mapID == cachedMapInfo.mapID then
+			if isNewTab then
+				-- if we just selected this tab and the map matches a quest then stay here until the next click
+				mapIndex = i;
+				break;
+			end
+			-- we want the next map after the current one
+			mapIndex = i + 1;
+			break;
+		end
+	end
+	if mapIndex > #self.cachedMapInfo then
+		mapIndex = 1;
+	end
+	self:GoToMap(self.cachedMapInfo[mapIndex].mapID);
 end
 
 function WorldMapBountyBoardMixin:TryShowingIntroTutorial()
 	if self.lockedType == WORLD_MAP_BOUNTY_BOARD_LOCK_TYPE_NONE then
-		if not self.TutorialBox:IsShown() and not GetCVarBitfield("closedInfoFrames", LE_FRAME_TUTORIAL_BOUNTY_INTRO) then
-			self.TutorialBox.activeTutorial = LE_FRAME_TUTORIAL_BOUNTY_INTRO;
+		if not GetCVarBitfield("closedInfoFrames", LE_FRAME_TUTORIAL_BOUNTY_INTRO) then
+			local helpTipInfo = {
+				text = BOUNTY_TUTORIAL_INTRO,
+				buttonStyle = HelpTip.ButtonStyle.Close,
+				cvarBitfield = "closedInfoFrames",
+				bitfieldFlag = LE_FRAME_TUTORIAL_BOUNTY_INTRO,
+				offsetY = -14,
+				system = "WorldMap",
+				systemPriority = 30,
+			};
 
-			self.TutorialBox.Text:SetText(BOUNTY_TUTORIAL_INTRO);
-
-			if self:GetDisplayLocation() == LE_MAP_OVERLAY_DISPLAY_LOCATION_TOP_RIGHT or self:GetDisplayLocation() == LE_MAP_OVERLAY_DISPLAY_LOCATION_BOTTOM_RIGHT then
-				SetClampedTextureRotation(self.TutorialBox.Arrow.Arrow, 270);
-				SetClampedTextureRotation(self.TutorialBox.Arrow.Glow, 270);
-
-				self.TutorialBox.Arrow:ClearAllPoints();
-				self.TutorialBox.Arrow:SetPoint("TOPLEFT", self.TutorialBox, "TOPRIGHT", -4, -15);
-
-				self.TutorialBox.Arrow.Glow:ClearAllPoints();
-				self.TutorialBox.Arrow.Glow:SetPoint("CENTER", self.TutorialBox.Arrow.Arrow, "CENTER", 2, 0);
-
-				self.TutorialBox:ClearAllPoints();
-				self.TutorialBox:SetPoint("RIGHT", self, "LEFT", 10, -15);
+			local displayLocation = self:GetDisplayLocation();
+			if displayLocation == Enum.MapOverlayDisplayLocation.TopRight or displayLocation == Enum.MapOverlayDisplayLocation.BottomRight then
+				helpTipInfo.targetPoint = HelpTip.Point.LeftEdgeCenter;
+				helpTipInfo.offsetX = 31;
 			else
-				SetClampedTextureRotation(self.TutorialBox.Arrow.Arrow, 90);
-				SetClampedTextureRotation(self.TutorialBox.Arrow.Glow, 90);
-
-				self.TutorialBox.Arrow:ClearAllPoints();
-				self.TutorialBox.Arrow:SetPoint("TOPLEFT", self.TutorialBox, "TOPLEFT", -17, -15);
-
-				self.TutorialBox.Arrow.Glow:ClearAllPoints();
-				self.TutorialBox.Arrow.Glow:SetPoint("CENTER", self.TutorialBox.Arrow.Arrow, "CENTER", -3, 0);
-
-				self.TutorialBox:ClearAllPoints();
-				self.TutorialBox:SetPoint("LEFT", self, "RIGHT", -10, -15);
+				helpTipInfo.targetPoint = HelpTip.Point.RightEdgeCenter;
+				helpTipInfo.offsetX = -31;
 			end
 
-			self.TutorialBox:Show();
+			HelpTip:Show(self, helpTipInfo);
 		end
 	end
 end
 
 function WorldMapBountyBoardMixin:TryShowingCompletionTutorial()
 	if self.lockedType == WORLD_MAP_BOUNTY_BOARD_LOCK_TYPE_NONE and self.firstCompletedTab then
-		if not self.TutorialBox:IsShown() and not GetCVarBitfield("closedInfoFrames", LE_FRAME_TUTORIAL_BOUNTY_FINISHED) then
-			self.TutorialBox.activeTutorial = LE_FRAME_TUTORIAL_BOUNTY_FINISHED;
-
-			self.TutorialBox.Text:SetText(BOUNTY_TUTORIAL_BOUNTY_FINISHED);
-
-			SetClampedTextureRotation(self.TutorialBox.Arrow.Arrow, 0);
-			SetClampedTextureRotation(self.TutorialBox.Arrow.Glow, 0);
-
-			self.TutorialBox.Arrow:ClearAllPoints();
-			self.TutorialBox.Arrow:SetPoint("TOP", self.TutorialBox, "BOTTOM", 0, 4);
-
-			self.TutorialBox.Arrow.Glow:ClearAllPoints();
-			self.TutorialBox.Arrow.Glow:SetPoint("TOP", self.TutorialBox.Arrow, "TOP", 0, 0);
-
-			self.TutorialBox:ClearAllPoints();
-			self.TutorialBox:SetPoint("BOTTOM", self.firstCompletedTab, "TOP", 0, 14);
-
-			self.TutorialBox:Show();
+		if not GetCVarBitfield("closedInfoFrames", LE_FRAME_TUTORIAL_BOUNTY_FINISHED) then
+			local helpTipInfo = {
+				text = BOUNTY_TUTORIAL_BOUNTY_FINISHED,
+				buttonStyle = HelpTip.ButtonStyle.Close,
+				cvarBitfield = "closedInfoFrames",
+				bitfieldFlag = LE_FRAME_TUTORIAL_BOUNTY_FINISHED,
+				targetPoint = HelpTip.Point.TopEdgeCenter,
+				offsetY = -7,
+				system = "WorldMap",
+				systemPriority = 20,
+			};
+			HelpTip:Show(self.firstCompletedTab, helpTipInfo);
 		end
 	end
 end

@@ -3,15 +3,16 @@ local TutorialData = addonTable.TutorialData;
 
 
 
--- ------------------------------------------------------------------------------------------------------------
+-- ============================================================================================================
 -- Helper Functions
--- ------------------------------------------------------------------------------------------------------------
+-- ============================================================================================================
 local TutorialHelper = {};
 
 -- ------------------------------------------------------------------------------------------------------------
 -- just a helper funciton for everytime you grab a localized string
-local function str(str)
-	return TutorialHelper:FormatAtlasString(str);
+local function formatStr(str)
+	--return TutorialHelper:FormatAtlasString(str);
+	return TutorialHelper:FormatString(str);
 end
 
 -- ------------------------------------------------------------------------------------------------------------
@@ -27,32 +28,34 @@ function TutorialHelper:GetClass()
 end
 
 -- ------------------------------------------------------------------------------------------------------------
-function TutorialHelper:FormatSpellString(str)
-	return (string.gsub(str, "{%$(%d+)}", function(spellID)
-				local name, _, icon = GetSpellInfo(spellID);
-				return string.format("|cFF00FFFF%s|r |T%s:16|t", name, icon);
-			end));
-end
+function TutorialHelper:FormatString(str)
+	-- Spell Names and Icons e.g. {$1234}
+	str = string.gsub(str, "{%$(%d+)}", function(spellID)
+			local name, _, icon = GetSpellInfo(spellID);
+			return string.format("|cFF00FFFF%s|r |T%s:16|t", name, icon);
+		end);
 
--- ------------------------------------------------------------------------------------------------------------
-function TutorialHelper:FormatAtlasString(str)
-	return (string.gsub(str, "{Atlas|([%w_]+):?(%d*)}", function(atlasName, size)
+	-- Spell Keybindings e.g. {KB|1234}
+	str = string.gsub(str, "{KB|(%d+)}", function(spellID)
+			local bindingString;
+
+			if (spellID) then
+				local btn = self:GetActionButtonBySpellID(tonumber(spellID));
+				if (btn) then
+					bindingString = GetBindingKey("ACTIONBUTTON" .. btn.action);
+				end
+			end
+
+			return string.format("[%s]", bindingString or "?");
+		end);
+
+	-- Atlas icons e.g. {Atlas|NPE_RightClick:16}
+	str = string.gsub(str, "{Atlas|([%w_]+):?(%d*)}", function(atlasName, size)
 				size = tonumber(size) or 0;
+				return CreateAtlasMarkup(atlasName, size, size);
+			end);
 
-				local filename, width, height, txLeft, txRight, txTop, txBottom = GetAtlasInfo(atlasName);
-
-				if (not filename) then return; end
-
-				local atlasWidth = width / (txRight - txLeft);
-				local atlasHeight = height / (txBottom - txTop);
-
-				local pxLeft	= atlasWidth	* txLeft;
-				local pxRight	= atlasWidth	* txRight;
-				local pxTop		= atlasHeight	* txTop;
-				local pxBottom	= atlasHeight	* txBottom;
-
-				return string.format("|T%s:%d:%d:0:0:%d:%d:%d:%d:%d:%d|t", filename, size, size, atlasWidth, atlasHeight, pxLeft, pxRight, pxTop, pxBottom);
-			end));
+	return str;
 end
 
 -- ------------------------------------------------------------------------------------------------------------
@@ -117,7 +120,7 @@ end
 
 -- ------------------------------------------------------------------------------------------------------------
 function TutorialHelper:IsQuestCompleteOrActive(questID)
-	return IsQuestFlaggedCompleted(questID) or (GetQuestLogIndexByID(questID) > 0);
+	return C_QuestLog.IsQuestFlaggedCompleted(questID) or C_QuestLog.GetLogIndexForQuestID(questID) ~= nil;
 end
 
 -- ------------------------------------------------------------------------------------------------------------
@@ -152,7 +155,7 @@ function TutorialHelper:GetActionButtonBySpellID(spellID)
 	-- backup for stance bars
 	for i = 1, 10 do
 		local btn = _G["StanceButton" .. i];
-		local icon, name, isActive, isCastable, sID = GetShapeshiftFormInfo(btn:GetID());
+		local icon, isActive, isCastable, sID = GetShapeshiftFormInfo(btn:GetID());
 
 		if (sID == spellID) then
 			return btn;
@@ -164,10 +167,10 @@ end
 
 -- ------------------------------------------------------------------------------------------------------------
 function TutorialHelper:GetGossipBindIndex()
-	local gossipOptions = { GetGossipOptions() };
-	for i = 1, #gossipOptions, 1 do
-		if gossipOptions[i] == "binder" then
-			return i / 2;
+	local GossipOptions = C_GossipInfo.GetOptions();
+	for i, gossipOption in ipairs(GossipOptions) do
+		if gossipOption.type == "binder" then
+			return i;
 		end
 	end
 end
@@ -193,6 +196,21 @@ function TutorialHelper:GetFrameButtonEdgeOffset(frame, button)
 end
 
 -- ------------------------------------------------------------------------------------------------------------
+function TutorialHelper:FindItemInContainer(itemID)
+	for containerIndex = 0, 4 do
+		local slots = GetContainerNumSlots(containerIndex);
+		if (slots > 0) then
+			for slotIndex = 1, slots do
+				local id = select(10, GetContainerItemInfo(containerIndex, slotIndex));
+				if (id == itemID) then
+					return containerIndex, slotIndex;
+				end
+			end
+		end
+	end
+end
+
+-- ------------------------------------------------------------------------------------------------------------
 function TutorialHelper:GetMapBinding()
 	return GetBindingKey("TOGGLEWORLDMAP") or "";
 end
@@ -212,10 +230,26 @@ end
 
 
 
+-- ============================================================================================================
+-- Map Bridge
+-- ============================================================================================================
+local MapBridgeDataProviderMixin = CreateFromMixins(MapCanvasDataProviderMixin);
 
+function MapBridgeDataProviderMixin:OnMapChanged(...) -- override
+	if self.mapChangedCallback then
+		self.mapChangedCallback(...);
+	end
+end
 
+function MapBridgeDataProviderMixin:SetOnMapChangedCallback(mapChangedCallback)
+	self.mapChangedCallback = mapChangedCallback;
+end
 
-
+function MapBridgeDataProviderMixin:New()
+	local t = CreateFromMixins(MapBridgeDataProviderMixin);
+	WorldMapFrame:AddDataProvider(t);
+	return t;
+end
 
 
 
@@ -659,7 +693,7 @@ end
 local Class_Intro_Interact = class("Intro_Interact", Class_TutorialBase);
 
 function Class_Intro_Interact:OnBegin()
-	self:ShowScreenTutorial(str(NPE_QUESTGIVER), nil, NPE_TutorialMainFrame.FramePositions.Low);
+	self:ShowScreenTutorial(formatStr(NPE_QUESTGIVER), nil, NPE_TutorialMainFrame.FramePositions.Low);
 	Dispatcher:RegisterEvent("QUEST_ACCEPTED", self);
 end
 
@@ -686,7 +720,7 @@ function Class_Intro_OpenMap:OnBegin()
 	Tutorials.QuestCompleteOpenMap:Interrupt(self);
 
 	local key = TutorialHelper:GetMapBinding();
-	self:ShowScreenTutorial(str(string.format(NPE_OPENMAP, key)));
+	self:ShowScreenTutorial(formatStr(string.format(NPE_OPENMAP, key)));
 	Dispatcher:RegisterScript(WorldMapFrame, "OnShow", function() self:Complete(); end, true);
 end
 
@@ -702,15 +736,16 @@ end
 local Class_Intro_MapHighlights = class("Intro_MapHighlights", Class_TutorialBase);
 
 function Class_Intro_MapHighlights:OnBegin()
-	self.MapAreaID = GetCurrentMapAreaID();
+	self.MapID = WorldMapFrame:GetMapID();
 
 	self.Prompt = NPE_MAPCALLOUTBASE;
 	local hasBlob = false;
 
-	for i = 1, GetNumQuestLogEntries() do
-		if (IsQuestWatched(i)) then
-			local questID = select(8, GetQuestLogTitle(i));
-			hasBlob = GetQuestPOIBlobCount(questID) > 0;
+	for i = 1, C_QuestLog.GetNumQuestLogEntries() do
+		local questID = C_QuestLog.GetQuestIDForLogIndex(i);
+		if QuestUtils_IsQuestWatched(questID) and GetQuestPOIBlobCount(questID) > 0 then
+			hasBlob = true;
+			break;
 		end
 	end
 
@@ -723,26 +758,27 @@ function Class_Intro_MapHighlights:OnBegin()
 	self:Display();
 
 	self.Timer = C_Timer.NewTimer(8, function()
-			if (WorldMapFrame_InWindowedMode()) then
-				self:AddPointerTutorial(str(NPE_CLOSEWORLDMAP), "LEFT", WorldMapFrameCloseButton, -15);
-			else
-				self:AddPointerTutorial(str(NPE_CLOSEWORLDMAP), "UP", WorldMapFrameCloseButton, 0, 15);
-			end
+			self:AddPointerTutorial(formatStr(NPE_CLOSEWORLDMAP), "UP", WorldMapFrameCloseButton, 0, 15);
 		end);
 
 	Dispatcher:RegisterScript(WorldMapFrame, "OnHide", function() self:Complete(); end, true);
-	Dispatcher:RegisterEvent("WORLD_MAP_UPDATE", self);
+
+	self.MapProvider = MapBridgeDataProviderMixin:New()
+	self.MapProvider:SetOnMapChangedCallback(function()
+			local mapID = self.MapProvider:GetMap():GetMapID();
+			if (mapID ~= self.MapID) then
+				self:Suppress();
+			else
+				self:Unsuppress();
+			end
+		end);
 end
 
 function Class_Intro_MapHighlights:Display()
-	self.MapPointerTutorialID = self:AddPointerTutorial(str(self.Prompt), "UP", WorldMapScrollFrame, 0, 100, nil, "LEFT");
-end
-
-function Class_Intro_MapHighlights:WORLD_MAP_UPDATE()
-	if (GetCurrentMapAreaID() ~= self.MapAreaID) then
-		self:Suppress();
+	if (WorldMapFrame.isMaximized) then
+		self.MapPointerTutorialID = self:AddPointerTutorial(formatStr(self.Prompt), "LEFT", WorldMapFrame.ScrollContainer, -200, 0, nil);
 	else
-		self:Unsuppress();
+		self.MapPointerTutorialID = self:AddPointerTutorial(formatStr(self.Prompt), "UP", WorldMapFrame.ScrollContainer, 0, 100, nil);
 	end
 end
 
@@ -805,7 +841,12 @@ local Class_SelectMobWatcher = class("SelectMobWatcher", Class_TutorialBase);
 
 function Class_SelectMobWatcher:OnBegin()
 	-- Use a leash on the first unit if it's defined, otherwise, lease the player's current location
-	local unit = TutorialHelper:GetRacialData().FirstKillQuestUnit;
+	local tutorialData = TutorialHelper:GetRacialData();
+	if not tutorialData then
+		return;
+	end
+
+	local unit = tutorialData.FirstKillQuestUnit;
 	if (unit) then
 		NPE_RangeManager:StartWatching( unit, NPE_RangeManager.Type.Unit, 20, function() self:Complete(); end);
 	else
@@ -840,7 +881,7 @@ end
 local Class_TargetMob = class("TargetMob", Class_TutorialBase);
 
 function Class_TargetMob:OnBegin()
-	self:ShowScreenTutorial(str(NPE_TARGETFIRSTMOB))
+	self:ShowScreenTutorial(formatStr(NPE_TARGETFIRSTMOB))
 
 	ClearTarget();
 	Dispatcher:RegisterEvent("UNIT_TARGET", self);
@@ -864,16 +905,16 @@ local Class_ActionBarCallout = class("ActionBarCallout", Class_TutorialBase);
 
 function Class_ActionBarCallout:OnBegin()
 	self.SuccessfulCastCount = 0;
+	self.isWarrior = TutorialHelper:GetClass() == "WARRIOR";
 
 	local startingAbility = TutorialHelper:FilterByClass(TutorialData.StartingAbility);
-	
-	local isWarrior = TutorialHelper:GetClass() == "WARRIOR";
-	if (isWarrior) then
+
+	if (self.isWarrior) then
 		startingAbility = 88163; -- Warriors start off with melee as their "first" ability.
 	end
 
 	if (self:HighlightPointer(startingAbility)) then
-		if (isWarrior) then
+		if (self.isWarrior) then
 			-- Warriors start with auto-attack to build rage, then call out their pointer
 			Dispatcher:RegisterEvent("PLAYER_REGEN_DISABLED", function()
 					self:HidePointerTutorials();
@@ -889,7 +930,7 @@ function Class_ActionBarCallout:Warrior_AttemptPointer2()
 	local requiredRage = 25; -- fallback value, something decentish
 	local costTable = GetSpellPowerCost(TutorialData.StartingAbility.WARRIOR);
 	for _, costInfo in pairs(costTable) do
-		if (costInfo.type == SPELL_POWER_RAGE) then
+		if (costInfo.type == Enum.PowerType.Rage) then
 			requiredRage = costInfo.cost;
 			break;
 		end
@@ -900,10 +941,10 @@ function Class_ActionBarCallout:Warrior_AttemptPointer2()
 		self:Warrior_InitiatePointer2();
 	else
 		local unitPowerID; -- this local must exist before the closure below is constructed
-		unitPowerID = Dispatcher:RegisterEvent("UNIT_POWER", function()
+		unitPowerID = Dispatcher:RegisterEvent("UNIT_POWER_UPDATE", function()
 				if (UnitPower('player') >= requiredRage) then
 					self:Warrior_InitiatePointer2();
-					Dispatcher:UnregisterEvent("UNIT_POWER", unitPowerID);
+					Dispatcher:UnregisterEvent("UNIT_POWER_UPDATE", unitPowerID);
 				end
 			end);
 	end
@@ -923,9 +964,11 @@ function Class_ActionBarCallout:HighlightPointer(spellID, textID)
 
 		-- Prompt the user to use the spell
 		local name, _, icon = GetSpellInfo(spellID);
-		local prompt = TutorialHelper:FormatSpellString(TutorialHelper:GetClassString(textID or "NPE_ABILITYINITIAL"));
-		--local prompt = TutorialHelper:FormatSpellString(NPE_ABILITYINITIAL);
-		self:ShowPointerTutorial(string.format(str(prompt), name, icon), "DOWN", btn);
+		local prompt = formatStr(TutorialHelper:GetClassString(textID or "NPE_ABILITYINITIAL"));
+		local binding = GetBindingKey("ACTIONBUTTON" .. btn.action) or "?";
+		local finalString = string.format(prompt, binding, name, icon);
+
+		self:ShowPointerTutorial(finalString, "DOWN", btn);
 		ActionButton_ShowOverlayGlow(btn);
 
 		return spellID;
@@ -934,7 +977,7 @@ function Class_ActionBarCallout:HighlightPointer(spellID, textID)
 	return false;
 end
 
-function Class_ActionBarCallout:UNIT_SPELLCAST_SUCCEEDED(unit, spellName, spellRank, spellLineID, spellID)
+function Class_ActionBarCallout:UNIT_SPELLCAST_SUCCEEDED(unit, _, spellID)
 	if (unit ~= "player") then return; end
 
 	if (spellID == self.SpellID) then
@@ -973,7 +1016,7 @@ function Class_HealthBarCallout:OnBegin()
 	local index, resourceIdentifier = UnitPowerType("player");
 	local resourceText = _G[resourceIdentifier];
 
-	local prompt = string.format(str(NPE_HEALTHBAR), resourceText);
+	local prompt = string.format(formatStr(NPE_HEALTHBAR), resourceText);
 
 	C_Timer.After(2, function()
 			self:ShowPointerTutorial(prompt, "UP", PlayerFrameManaBar, 0, 0);
@@ -1098,7 +1141,7 @@ function Class_EquipFirstItemWatcher:GetPotentialItemUpgrades()
 	local potentialUpgrades = {};
 
 	local playerClass = select(2, UnitClass("player"));
-	
+
 	for i = 0, INVSLOT_LAST_EQUIPPED do
 		local existingItemIlvl = 0;
 		local existingItemWeaponType;
@@ -1129,7 +1172,7 @@ function Class_EquipFirstItemWatcher:GetPotentialItemUpgrades()
 					if (i == INVSLOT_MAINHAND) then
 						local weaponType = self:GetWeaponType(itemID);
 						match = (not existingItemWeaponType) or (existingItemWeaponType == weaponType);
-						
+
 						-- rouge's should only be recommended daggers
 						if ( playerClass == "ROGUE" and (itemInfo[12] ~= ITEMSUBCLASSTYPES["DAGGER"].classID or itemInfo[13] ~= ITEMSUBCLASSTYPES["DAGGER"].subClassID) ) then
 							match = false;
@@ -1145,7 +1188,7 @@ function Class_EquipFirstItemWatcher:GetPotentialItemUpgrades()
 								match = false;
 							end
 						end
-						
+
 						-- rouge's should only be recommended daggers
 						if ( playerClass == "ROGUE" and (itemInfo[12] ~= ITEMSUBCLASSTYPES["DAGGER"].classID or itemInfo[13] ~= ITEMSUBCLASSTYPES["DAGGER"].subClassID) ) then
 							match = false;
@@ -1220,7 +1263,7 @@ function Class_ShowBags:OnBegin(data)
 	Dispatcher:RegisterFunction("ToggleBackpack", function() self:Complete() end, true);
 
 	local key = TutorialHelper:GetBagBinding();
-	self:ShowScreenTutorial(str(string.format(NPE_OPENBAG, key)));
+	self:ShowScreenTutorial(formatStr(string.format(NPE_OPENBAG, key)));
 end
 
 function Class_ShowBags:OnComplete()
@@ -1244,18 +1287,36 @@ function Class_EquipItem:OnBegin(data)
 
 	self.ItemData = data;
 
-	local itemFrame = TutorialHelper:GetItemContainerFrame(data.Container, data.ContainerSlot);
-	if (itemFrame) then
-		self:ShowPointerTutorial(str(NPE_EQUIPITEM), "DOWN", itemFrame, 0, 0);
-	end
+	self:UpdatePointer();
 
 	Dispatcher:RegisterEvent("PLAYER_EQUIPMENT_CHANGED", self)
+	Dispatcher:RegisterEvent("BAG_UPDATE_DELAYED", self)
 	Dispatcher:RegisterEvent("MERCHANT_SHOW", function() self:Interrupt(self) end, true);
+end
+
+function Class_EquipItem:UpdatePointer()
+	local itemFrame = TutorialHelper:GetItemContainerFrame(self.ItemData.Container, self.ItemData.ContainerSlot);
+	if (itemFrame) then
+		self:ShowPointerTutorial(formatStr(NPE_EQUIPITEM), "DOWN", itemFrame, 0, 0);
+	end
 end
 
 function Class_EquipItem:PLAYER_EQUIPMENT_CHANGED()
 	if (GetInventoryItemID("player", self.ItemData.CharacterSlot) == self.ItemData.ItemID) then
 		self:Complete()
+	end
+end
+
+function Class_EquipItem:BAG_UPDATE_DELAYED()
+	if (self.IsActive) then
+		local container, slot = TutorialHelper:FindItemInContainer(self.ItemData.ItemID);
+		if (container and slot) then
+			self.ItemData.Container, self.ItemData.ContainerSlot = container, slot;
+			self:UpdatePointer();
+		else
+			self:Interrupt();
+			Tutorials.ShowBags:Interrupt();
+		end
 	end
 end
 
@@ -1266,7 +1327,6 @@ end
 
 function Class_EquipItem:OnShutdown()
 	self.ItemData = nil;
-	Dispatcher:UnregisterEvent("PLAYER_EQUIPMENT_CHANGED", self)
 end
 
 
@@ -1280,7 +1340,7 @@ local Class_OpenCharacterSheet = class("OpenCharacterSheet", Class_TutorialBase)
 -- @param data: type STRUCT_ItemContainer
 function Class_OpenCharacterSheet:OnBegin(data)
 	local key = TutorialHelper:GetCharacterBinding();
-	self:ShowScreenTutorial(str(string.format(NPE_OPENCHARACTERSHEET, key)));
+	self:ShowScreenTutorial(formatStr(string.format(NPE_OPENCHARACTERSHEET, key)));
 
 	if (CharacterFrame:IsVisible()) then
 		self:Complete(data);
@@ -1327,7 +1387,7 @@ function Class_HighlightEquippedItem:OnBegin(data)
 
 	local equippedItemFrame = _G[Slot[data.CharacterSlot]];
 
-	self:ShowPointerTutorial(str(NPE_EQUIPPEDITEM), "LEFT", equippedItemFrame);
+	self:ShowPointerTutorial(formatStr(NPE_EQUIPPEDITEM), "LEFT", equippedItemFrame);
 	Dispatcher:RegisterScript(CharacterFrame, "OnHide", function() self:Complete() end, true)
 end
 
@@ -1342,7 +1402,7 @@ function Class_CloseCharacterSheet:OnBegin()
 	Dispatcher:RegisterScript(CharacterFrame, "OnHide", function() self:Complete() end, true);
 
 	self.Timer = C_Timer.NewTimer(20, function()
-			self:ShowPointerTutorial(str(NPE_CLOSECHARACTERSHEET), "LEFT", CharacterFrameCloseButton, -10);
+			self:ShowPointerTutorial(formatStr(NPE_CLOSECHARACTERSHEET), "LEFT", CharacterFrameCloseButton, -10);
 		end);
 end
 
@@ -1446,11 +1506,11 @@ end
 
 -- Watch for units dying while in combat.  if that happened, check the unit to see if the
 -- player can loot it and if so, prompt the player to loot
-function Class_LootCorpseWatcher:COMBAT_LOG_EVENT_UNFILTERED(timestamp, logEvent, ...)
+function Class_LootCorpseWatcher:COMBAT_LOG_EVENT_UNFILTERED(timestamp, logEvent)
+	local eventData = {CombatLogGetCurrentEventInfo()};
+	local logEvent = eventData[2];
+	local unitGUID = eventData[8];
 	if ((logEvent == "UNIT_DIED") or (logEvent == "UNIT_DESTROYED")) then
-		--- !!! VarArgs can't be passed into closures
-		local unitGUID = select(6, ...);
-
 		-- Wait for mirror data
 		C_Timer.After(1, function()
 				if CanLootUnit(unitGUID) then
@@ -1547,10 +1607,10 @@ function Class_LootCorpse:OnUnsuppressed()
 end
 
 function Class_LootCorpse:Display()
-	local prompt = str(NPE_LOOTCORPSE);
+	local prompt = formatStr(NPE_LOOTCORPSE);
 
 	if (self.QuestMobID) then
-		prompt = str(NPE_LOOTCORPSEQUEST);
+		prompt = formatStr(NPE_LOOTCORPSEQUEST);
 	end
 
 	self:ShowScreenTutorial(prompt);
@@ -1581,7 +1641,7 @@ end
 function Class_LootPointer:LOOT_OPENED()
 	local btn = LootButton1;
 	if (btn) then
-		self:ShowPointerTutorial(str(NPE_CLICKLOOT), "RIGHT", btn);
+		self:ShowPointerTutorial(formatStr(NPE_CLICKLOOT), "RIGHT", btn);
 	end
 end
 
@@ -1627,7 +1687,7 @@ end
 local Class_Death_ReleaseCorpse = class("Death_ReleaseCorpse", Class_TutorialBase);
 
 function Class_Death_ReleaseCorpse:OnBegin()
-	self:ShowPointerTutorial(str(NPE_RELEASESPIRIT), "LEFT", StaticPopup1);
+	self:ShowPointerTutorial(formatStr(NPE_RELEASESPIRIT), "LEFT", StaticPopup1);
 	Dispatcher:RegisterEvent("PLAYER_ALIVE", self);
 end
 
@@ -1649,7 +1709,7 @@ local Class_Death_MapPrompt = class("Death_MapPrompt", Class_TutorialBase);
 
 function Class_Death_MapPrompt:OnBegin()
 	local key = TutorialHelper:GetMapBinding();
-	self:ShowScreenTutorial(str(string.format(NPE_FINDCORPSE, key)));
+	self:ShowScreenTutorial(formatStr(string.format(NPE_FINDCORPSE, key)));
 	Dispatcher:RegisterEvent("CORPSE_IN_RANGE", self);
 	Dispatcher:RegisterEvent("PLAYER_UNGHOST", self);
 end
@@ -1672,7 +1732,7 @@ end
 local Class_Death_ResurrectPrompt = class("Death_ResurrectPrompt", Class_TutorialBase);
 
 function Class_Death_ResurrectPrompt:OnBegin()
-	self:ShowPointerTutorial(str(NPE_RESURRECT), "UP", StaticPopup1);
+	self:ShowPointerTutorial(formatStr(NPE_RESURRECT), "UP", StaticPopup1);
 	Dispatcher:RegisterEvent("PLAYER_UNGHOST", self);
 end
 
@@ -1728,11 +1788,11 @@ function Class_QuestCompleteOpenMap:OnBegin(questData)
 
 	local key = TutorialHelper:GetMapBinding();
 
-	local prompt = str(string.format(NPE_QUESTCOMPLETE, key));
+	local prompt = formatStr(string.format(NPE_QUESTCOMPLETE, key));
 
 	-- If the quest took less than one second to complete, it was most likely a breadcurmb quest.
 	if (questData:GetActiveTime() < 1) then
-		prompt = str(string.format(NPE_QUESTCOMPLETEBREADCRUMB, key));
+		prompt = formatStr(string.format(NPE_QUESTCOMPLETEBREADCRUMB, key));
 	end
 
 	self:ShowScreenTutorial(prompt);
@@ -1757,8 +1817,6 @@ local Class_ShowMapQuestTurnIn = class("ShowMapQuestTurnIn", Class_TutorialBase)
 
 -- @param questData: Class QuestData (QuestManager.lua)
 function Class_ShowMapQuestTurnIn:OnBegin(questData)
-	self.MapAreaID = GetCurrentMapAreaID();
-
 	-- This should no longer ever happen, but it's a good safety check anyway.
 	if (not questData) then
 		self:Interrupt(self);
@@ -1766,40 +1824,43 @@ function Class_ShowMapQuestTurnIn:OnBegin(questData)
 	end
 
 	self.QuestData = questData;
+	self.MapProvider = MapBridgeDataProviderMixin:New();
+
+	self.MapProvider:SetOnMapChangedCallback(function()
+			self:Display();
+		end);
 
 	self:Display();
-	Dispatcher:RegisterEvent("WORLD_MAP_UPDATE", self);
 	Dispatcher:RegisterScript(WorldMapFrame, "OnHide", function() self:Complete(); end, true);
 end
 
-function Class_ShowMapQuestTurnIn:WORLD_MAP_UPDATE()
-	local newArea = GetCurrentMapAreaID();
-	if (newArea ~= self.MapAreaID) then
-		self:Display();
-		self.MapAreaID = newArea;
-	end
-end
-
 function Class_ShowMapQuestTurnIn:Display()
-	local direction = "LEFT";
-	local _, posX, posY = QuestPOIGetIconInfo(self.QuestData.QuestID);
-	if (posX and (posX > 0.5)) then -- sometimes QuestPOIGetIconInfo returns nil;
-		direction = "RIGHT";
-	end
+	-- Make sure we're on the correct map
+	local currentMap = self.MapProvider:GetMap():GetMapID();
+	local desiredMap = self.QuestData:GetTurnInMapID();
 
-	local poiButton = WorldMapPOIFrame.poiSelectedButton;
-	if (poiButton) then
-		self:ShowPointerTutorial(str(NPE_QUESTCOMPELTELOCATION), direction, poiButton);
-		Tutorials.SelectQuestDifferentZone:Complete();
-	else
-		local logIndex = GetQuestLogIndexByID(self.QuestData.QuestID)
-		if (logIndex ~= 0) then -- make sure it's in the log
-			if (select(11, GetQuestLogTitle(logIndex))) then -- 11: isOnMap
-				Tutorials.SelectQuestDifferentZone:Begin();
-			else
-				Tutorials.SelectQuestDifferentZone:Interrupt();
+	local poiButton;
+
+	-- Get the PoI Pin from the map map
+	if (currentMap == desiredMap) then
+		for pin in self.MapProvider:GetMap():EnumeratePinsByTemplate("QuestPinTemplate") do
+			if (pin.questID == self.QuestData.QuestID) then
+				poiButton = pin;
 			end
 		end
+	end
+
+	if (poiButton) then
+		local direction = "LEFT";
+		local _, posX, posY = QuestPOIGetIconInfo(self.QuestData.QuestID);
+		if (posX and (posX > 0.5)) then -- sometimes QuestPOIGetIconInfo returns nil;
+			direction = "RIGHT";
+		end
+
+		self:ShowPointerTutorial(formatStr(NPE_QUESTCOMPELTELOCATION), direction, poiButton);
+		Tutorials.SelectQuestDifferentZone:Complete();
+	else
+		Tutorials.SelectQuestDifferentZone:ForceBegin(self.QuestData);
 	end
 end
 
@@ -1809,10 +1870,35 @@ end
 -- prompt the player to click on the quest to select the correct map.
 -- ------------------------------------------------------------------------------------------------------------
 local Class_SelectQuestDifferentZone = class("SelectQuestDifferentZone", Class_TutorialBase);
+function Class_SelectQuestDifferentZone:OnBegin(questData)
+	self.QuestData = questData;
 
-function Class_SelectQuestDifferentZone:OnBegin()
-	self:ShowPointerTutorial(str(NPE_TURNINNOTONMAP), "LEFT", QuestScrollFrame, 0, -20, "TOPRIGHT");
+	-- Have to delay by one frame because the quest log doesn't update before this code runs which causes the frame pool to be out of sync
+	C_Timer.After(0, function() self:Display(); end);
+end
+
+function Class_SelectQuestDifferentZone:Display()
 	Dispatcher:RegisterScript(WorldMapFrame, "OnHide", function() self:Complete(); end, true);
+
+	if (QuestMapFrame.DetailsFrame:IsVisible()) then
+		return;
+	end
+
+	local found;
+	if (self.QuestData) then
+		-- Find the correct quest to point at
+		for frame, v in QuestScrollFrame.titleFramePool:EnumerateActive() do
+			if (frame.questID == self.QuestData.QuestID) then
+				found = true;
+				self:ShowPointerTutorial(formatStr(NPE_TURNINNOTONMAP), "LEFT", frame, 0, 0, "RIGHT");
+				break;
+			end
+		end
+	end
+
+	if (not found) then
+		self:ShowPointerTutorial(formatStr(NPE_TURNINNOTONMAP_QUESTFRAMENOTFOUND), "LEFT", QuestScrollFrame, -20, 0, "RIGHT");
+	end
 end
 
 -- ------------------------------------------------------------------------------------------------------------
@@ -1834,7 +1920,7 @@ function Class_AcceptMoreQuests:OnBegin(questBundle)
 	end
 
 	self.Bundle = questBundle;
-	self:ShowScreenTutorial(str(NPE_MOREQUESTS), nil, NPE_TutorialMainFrame.FramePositions.Low)
+	self:ShowScreenTutorial(formatStr(NPE_MOREQUESTS), nil, NPE_TutorialMainFrame.FramePositions.Low)
 end
 
 function Class_AcceptMoreQuests:QuestAccepted(questID)
@@ -1873,7 +1959,7 @@ function Class_AcceptQuest:OnInitialize()
 end
 
 function Class_AcceptQuest:OnBegin()
-	self:ShowPointerTutorial(str(NPE_ACCEPTQUEST), "UP", QuestFrameAcceptButton, 0, 10, nil, "LEFT");
+	self:ShowPointerTutorial(formatStr(NPE_ACCEPTQUEST), "UP", QuestFrameAcceptButton, 0, 10, nil, "LEFT");
 	Dispatcher:RegisterScript(QuestFrame, "OnHide", function() self:Complete(); end, true);
 end
 
@@ -1893,11 +1979,9 @@ function Class_TurnInQuestWatcher:QUEST_COMPLETE()
 	local areAllItemsUsable = true;
 
 	-- Figure out if all the items are usable
-	local questID = GetQuestID(); -- the last ID that was brought up in a quest frame
-	local questLogIndex = GetQuestLogIndexByID(questID) -- find the index in the quest log
-	SelectQuestLogEntry(questLogIndex) -- select it behind the secenes for the next two function calls
-	local numChoices = GetNumQuestLogChoices()
-	for i = 1, numChoices do
+	local questID = GetQuestID();
+	C_QuestLog.SetSelectedQuest(questID);
+	for i = 1, GetNumQuestLogChoices(questID) do
 		local isUsable = select(5, GetQuestLogChoiceInfo(i));
 		if (not isUsable) then
 			areAllItemsUsable = false;
@@ -1922,7 +2006,7 @@ function Class_TurnInQuest:OnInitialize()
 end
 
 function Class_TurnInQuest:OnBegin()
-	self:ShowPointerTutorial(str(NPE_TURNINQUEST), "UP", QuestFrameCompleteQuestButton, 0, 10);
+	self:ShowPointerTutorial(formatStr(NPE_TURNINQUEST), "UP", QuestFrameCompleteQuestButton, 0, 10);
 	Dispatcher:RegisterScript(QuestFrame, "OnHide", function() self:Complete() end, true);
 end
 
@@ -1933,10 +2017,10 @@ end
 local Class_QuestRewardChoice = class("QuestRewardChoice", Class_TutorialBase);
 
 function Class_QuestRewardChoice:OnBegin(areAllItemsUsable)
-	local prompt = str(NPE_QUESTREWARDCHOICE);
+	local prompt = formatStr(NPE_QUESTREWARDCHOICE);
 
 	if (not areAllItemsUsable) then
-		prompt = str(NPE_QUESTREWARDCHOCIEREDITEMS) .. prompt;
+		prompt = formatStr(NPE_QUESTREWARDCHOCIEREDITEMS) .. prompt;
 	end
 
 	local yOffset;
@@ -1973,7 +2057,7 @@ function Class_UseQuestItem:OnBegin(data)
 
 	local module = QUEST_TRACKER_MODULE:GetBlock(data.QuestID)
 	if (module and module.itemButton) then
-		self:ShowPointerTutorial(str(NPE_USEQUESTITEM), "UP", module.itemButton);
+		self:ShowPointerTutorial(formatStr(NPE_USEQUESTITEM), "UP", module.itemButton);
 
 		Dispatcher:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED", self);
 	end
@@ -1994,7 +2078,7 @@ end
 local Class_UseQuestObject = class("UseQuestObject", Class_TutorialBase);
 
 function Class_UseQuestObject:OnBegin()
-	self:ShowScreenTutorial(str(NPE_QUESTOBJECT));
+	self:ShowScreenTutorial(formatStr(NPE_QUESTOBJECT));
 	C_Timer.After(10, function() self:Complete() end);
 end
 
@@ -2005,7 +2089,7 @@ end
 local Class_NPCInteractQuest = class("NPCInteractQuest", Class_TutorialBase);
 
 function Class_NPCInteractQuest:OnBegin()
-	self:ShowScreenTutorial(str(NPE_NPCINTERACT));
+	self:ShowScreenTutorial(formatStr(NPE_NPCINTERACT));
 	C_Timer.After(10, function() self:Complete() end);
 end
 
@@ -2017,7 +2101,7 @@ end
 local Class_LootFromObject = class("LootFromObject", Class_TutorialBase);
 
 function Class_LootFromObject:OnBegin()
-	self:ShowScreenTutorial(str(NPE_OBJECTLOOT), 20);
+	self:ShowScreenTutorial(formatStr(NPE_OBJECTLOOT), 20);
 	Dispatcher:RegisterEvent("CHAT_MSG_LOOT", function() self:Complete() end, true);
 end
 
@@ -2084,7 +2168,7 @@ function Class_AbilityUse_Watcher:PLAYER_REGEN_ENABLED()
 	Dispatcher:UnregisterEvent("OnUpdate", self);
 end
 
-function Class_AbilityUse_Watcher:UNIT_SPELLCAST_SUCCEEDED(unit, spellName, spellRank, spellLine, spellID)
+function Class_AbilityUse_Watcher:UNIT_SPELLCAST_SUCCEEDED(unit, _, spellID)
 	if (unit == "player") then
 		local desiredSpellID = TutorialHelper:FilterByClass(TutorialData.StartingAbility);
 		if (spellID == desiredSpellID) then
@@ -2101,7 +2185,7 @@ end
 local Class_AbilityUse_SpellInterrupted = class("AbilityUse_SpellInterrupted", Class_TutorialBase);
 
 function Class_AbilityUse_SpellInterrupted:OnBegin()
-	self:ShowScreenTutorial(str(NPE_MOVEMENTCANCELSSPELL), 5);
+	self:ShowScreenTutorial(formatStr(NPE_MOVEMENTCANCELSSPELL), 5);
 	Dispatcher:RegisterEvent("UNIT_SPELLCAST_START", function() self:Complete() end, true);
 end
 
@@ -2125,8 +2209,8 @@ function Class_AbilityUse_AbilityReminder:OnBegin()
 	local btn = TutorialHelper:GetActionButtonBySpellID(self.SpellID);
 	if (btn) then
 		local name, _, icon = GetSpellInfo(self.SpellID);
-		local prompt = TutorialHelper:FormatSpellString(TutorialHelper:GetClassString("NPE_ABILITYREMINDER"));
-		self:ShowPointerTutorial(string.format(str(prompt), name, icon), "DOWN", btn);
+		local prompt = formatStr(TutorialHelper:GetClassString("NPE_ABILITYREMINDER"));
+		self:ShowPointerTutorial(string.format(prompt, name, icon), "DOWN", btn);
 
 		Dispatcher:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED", self);
 
@@ -2144,7 +2228,7 @@ function Class_AbilityUse_AbilityReminder:OnBegin()
 	end
 end
 
-function Class_AbilityUse_AbilityReminder:UNIT_SPELLCAST_SUCCEEDED(unit, spellName, spellRank, spellLine, spellID)
+function Class_AbilityUse_AbilityReminder:UNIT_SPELLCAST_SUCCEEDED(unit, _, spellID)
 	if ((unit == "player") and (spellID == self.SpellID)) then
 		self:Complete();
 	end
@@ -2168,10 +2252,10 @@ end
 
 function Class_Level3Ability:PLAYER_REGEN_DISABLED()
 	local spellID = TutorialHelper:FilterByClass(TutorialData.Level3Ability);
-	local button = TutorialHelper:GetActionButtonBySpellID(spellID);
-	if (button) then
-		local prompt = TutorialHelper:FormatSpellString(TutorialHelper:GetClassString("NPE_ABILITYLEVEL3"));
-		self:ShowPointerTutorial(str(prompt), "DOWN", button);
+	local btn = TutorialHelper:GetActionButtonBySpellID(spellID);
+	if (btn) then
+		local prompt = formatStr(TutorialHelper:GetClassString("NPE_ABILITYLEVEL3"));
+		self:ShowPointerTutorial(prompt, "DOWN", btn);
 
 		if (UnitAffectingCombat("player")) then
 			Dispatcher:RegisterEvent("PLAYER_REGEN_ENABLED", function()
@@ -2217,8 +2301,8 @@ function Class_GossipWatcher:OnBegin()
 end
 
 function Class_GossipWatcher:GOSSIP_SHOW()
-	local numActiveQuests = GetNumGossipActiveQuests(); -- (?) quests ready to turn in
-	local numAvailabelQuests = GetNumGossipAvailableQuests(); -- (!) quests available to pick up
+	local numActiveQuests = C_GossipInfo.GetNumActiveQuests(); -- (?) quests ready to turn in
+	local numAvailabelQuests = C_GossipInfo.GetNumAvailableQuests(); -- (!) quests available to pick up
 	local shouldBind = TutorialHelper:GetGossipBindIndex() and (GetBindLocation() ~= GetMinimapZoneText());
 
 	if ((numActiveQuests + numAvailabelQuests) > 0) then
@@ -2254,26 +2338,27 @@ function Class_GossipQuestPointer:OnBegin()
 
 	Dispatcher:RegisterEvent("GOSSIP_CLOSED", function() self:Complete() end, true);
 
-	local numActiveQuests = GetNumGossipActiveQuests(); -- (?) quests ready to turn in
-	local numAvailabelQuests = GetNumGossipAvailableQuests(); -- (!) quests available to pick up
+	local numActiveQuests = C_GossipInfo.GetNumActiveQuests(); -- (?) quests ready to turn in
+	local numAvailabelQuests = C_GossipInfo.GetNumAvailableQuests(); -- (!) quests available to pick up
 
 	local questText;
 	local pointerText;
 
-	if ((numActiveQuests > 0) and (select(4, GetGossipActiveQuests()))) then
-		questText = GetGossipActiveQuests();
-		pointerText = str(NPE_GOSSIPQUESTACTIVE);
+	local gossipQuests = C_GossipInfo.GetActiveQuests();
+	if ((numActiveQuests > 0) and (gossipQuests[1].isComplete)) then
+		questText = gossipQuests[1].title;
+		pointerText = formatStr(NPE_GOSSIPQUESTACTIVE);
 	elseif (numAvailabelQuests > 0) then
-		questText = GetGossipAvailableQuests();
-		pointerText	 = str(NPE_GOSSIPQUESTAVAILABLE);
+		questText =	gossipQuests[1].title;
+		pointerText	 = formatStr(NPE_GOSSIPQUESTAVAILABLE);
 	end
 
 	local button;
 
 	-- Try to find the actual gossip button
 	if (questText) then
-		for i = 1, 10 do
-			local btn = _G["GossipTitleButton" .. i];
+		for i=1, GossipFrame_GetTitleButtonCount() do
+			local btn = GossipFrame_GetTitleButton(i);
 			if (btn) then
 				local text = btn:GetText();
 				if (text and string.match(text, questText)) then
@@ -2302,7 +2387,7 @@ function Class_GossipBindPrompt:OnInitialize()
 end
 
 function Class_GossipBindPrompt:OnBegin()
-	self:ShowScreenTutorial(str(NPE_BINDPROMPT));
+	self:ShowScreenTutorial(formatStr(NPE_BINDPROMPT));
 end
 
 -- ------------------------------------------------------------------------------------------------------------
@@ -2321,20 +2406,20 @@ function Class_GossipBindPointer:OnBegin()
 
 	if (bindButtonIndex) then
 		-- offset the index by the first gossip button
-		for i = 1, 32 do
-			local btn = _G["GossipTitleButton" .. i];
-			if ((btn.type) == "Gossip") then
+		for i=1, GossipFrame_GetTitleButtonCount() do
+			local btn = GossipFrame_GetTitleButton(i);
+			if btn and btn.type == "Gossip" then
 				bindButtonIndex = bindButtonIndex + (i - 1);
 				break;
 			end
 		end
 
-		local button = _G["GossipTitleButton" .. bindButtonIndex];
+		local button = GossipFrame_GetTitleButton(bindButtonIndex);
 
-		if (button) then
+		if button then
 			local x, y = TutorialHelper:GetFrameButtonEdgeOffset(GossipFrame, button);
 
-			self:ShowPointerTutorial(str(NPE_BINDPOINTER), "LEFT", GossipFrame, x, y, "TOPRIGHT");
+			self:ShowPointerTutorial(formatStr(NPE_BINDPOINTER), "LEFT", GossipFrame, x, y, "TOPRIGHT");
 		else
 			self:Interrupt(self);
 		end
@@ -2352,9 +2437,9 @@ end
 local Class_InteractThenGossipA = class("InteractThenGossipA", Class_TutorialBase);
 
 function Class_InteractThenGossipA:OnBegin(data)
-	self:ShowScreenTutorial(str(NPE_NPCINTERACT));
+	self:ShowScreenTutorial(formatStr(NPE_NPCINTERACT));
 	Dispatcher:RegisterEvent("GOSSIP_SHOW", function()
-			local btn = GossipTitleButton1;
+			local btn = GossipFrame_GetTitleButton(1);
 			if (btn and btn:IsVisible()) then
 				self:Complete();
 			end
@@ -2383,10 +2468,10 @@ function Class_InteractThenGossipB:GOSSIP_SHOW()
 end
 
 function Class_InteractThenGossipB:PointAtButton()
-	local btn = GossipTitleButton1;
-	if (btn and btn:IsVisible()) then
+	local btn = GossipFrame_GetTitleButton(1);
+	if btn and btn:IsVisible() then
 		local x, y = TutorialHelper:GetFrameButtonEdgeOffset(GossipFrame, btn);
-		self:ShowPointerTutorial(str(NPE_NPCGOSSIP), "LEFT", GossipFrame, x, y, "TOPRIGHT");
+		self:ShowPointerTutorial(formatStr(NPE_NPCGOSSIP), "LEFT", GossipFrame, x, y, "TOPRIGHT");
 	end
 end
 
@@ -2429,7 +2514,7 @@ function Class_HighlightItem:OnBegin(data)
 
 	self.itemFrame = TutorialHelper:GetItemContainerFrame(data.Container, data.ContainerSlot);
 	if (self.itemFrame) then
-		self:ShowPointerTutorial(str(NPE_EQUIPITEM), "DOWN", self.itemFrame, 0, 15);
+		self:ShowPointerTutorial(formatStr(NPE_EQUIPITEM), "DOWN", self.itemFrame, 0, 15);
 
 		Dispatcher:RegisterFunction("ContainerFrameItemButton_OnEnter", self);
 		Dispatcher:RegisterFunction("ContainerFrame_Update", self, true);
@@ -2454,13 +2539,19 @@ local Class_Taxi = class("Taxi", Class_TutorialBase);
 
 function Class_Taxi:OnBegin()
 	Dispatcher:RegisterEvent("TAXIMAP_OPENED", self);
+	Dispatcher:RegisterEvent("TAXIMAP_CLOSED", self);
 end
 
-function Class_Taxi:TAXIMAP_OPENED()
-	if TaxiFrame_ShouldShowOldStyle() then
-		self:ShowPointerTutorial(str(NPE_TAXICALLOUT), "LEFT", TaxiRouteMap, -10, 0);
-		Dispatcher:RegisterScript(TaxiFrame, "OnHide", function() self:Complete() end);
+function Class_Taxi:TAXIMAP_OPENED(uiMapSystem)
+	local frame = FlightMapFrame.ScrollContainer;
+	if uiMapSystem == Enum.UIMapSystem.Taxi then
+		frame = TaxiRouteMap;
 	end
+	self:ShowPointerTutorial(formatStr(NPE_TAXICALLOUT), "LEFT", frame, -10, 0);
+end
+
+function Class_Taxi:TAXIMAP_CLOSED()
+	self:Complete();
 end
 
 -- ------------------------------------------------------------------------------------------------------------
@@ -2476,11 +2567,11 @@ end
 function Class_UseHearthstone:OnBegin()
 	Tutorials.EquipItem:Interrupt(self);
 
-	self:ShowScreenTutorial(str(NPE_USEHEARTHSTONE), 60);
+	self:ShowScreenTutorial(formatStr(NPE_USEHEARTHSTONE), 60);
 	Dispatcher:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED", self);
 end
 
-function Class_UseHearthstone:UNIT_SPELLCAST_SUCCEEDED(unitID, spellName, spellRank, spellLineID, spellID)
+function Class_UseHearthstone:UNIT_SPELLCAST_SUCCEEDED(unitID, _, spellID)
 	if ((unitID == "player") and (spellID == 8690)) then
 		self:Complete();
 	end
@@ -2502,7 +2593,7 @@ function Class_ChatFrame:OnBegin(editBox)
 		self.ShowCount = self.ShowCount + 1;
 
 		if (self.ShowCount == 1) then
-			self:ShowPointerTutorial(str(NPE_CHATFRAME), "LEFT", editBox);
+			self:ShowPointerTutorial(formatStr(NPE_CHATFRAME), "LEFT", editBox);
 		end
 
 		self.Elapsed = 0;
@@ -2574,13 +2665,13 @@ function Class_Dranei_9283:OnBegin()
 	end
 
 	if (btn) then
-		self:ShowPointerTutorial(str(TutorialHelper:FormatSpellString(NPE_DRAENEIGIFTOFTHENARARU)), "DOWN", btn);
+		self:ShowPointerTutorial(formatStr(NPE_DRAENEIGIFTOFTHENARARU), "DOWN", btn);
 		Dispatcher:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED", self)
 	end
 
 end
 
-function Class_Dranei_9283:UNIT_SPELLCAST_SUCCEEDED(unit, spellName, spellRank, spellLineID, spellID)
+function Class_Dranei_9283:UNIT_SPELLCAST_SUCCEEDED(unit, _, spellID)
 	 if ((unit == "player") and (spellID == self.SpellID)) then
 	 	self:Complete();
 	 end
@@ -2610,13 +2701,13 @@ function Class_BloodElf_8346:OnBegin()
 	end
 
 	if (btn) then
-		self:ShowPointerTutorial(str(TutorialHelper:FormatSpellString(NPE_BLOODELFARCANETORRENT)), "DOWN", btn);
+		self:ShowPointerTutorial(formatStr(NPE_BLOODELFARCANETORRENT), "DOWN", btn);
 		Dispatcher:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED", self)
 	end
 
 end
 
-function Class_BloodElf_8346:UNIT_SPELLCAST_SUCCEEDED(unit, spellName, spellRank, spellLineID, spellID)
+function Class_BloodElf_8346:UNIT_SPELLCAST_SUCCEEDED(unit, _, spellID)
 	 if ((unit == "player") and (spellID == self.SpellID)) then
 	 	self:Complete();
 	 end
@@ -2659,12 +2750,15 @@ function Tutorials:Begin()
 	-- Turn on specific tutorials
 	local level = UnitLevel("player");
 
-	-- First Quest
-	local startingQuest = TutorialHelper:FilterByClass(TutorialHelper:GetRacialData().StartingQuest);
-	if (not TutorialHelper:IsQuestCompleteOrActive(startingQuest)) then
-		Tutorials.Intro_Interact:Begin();
-	else -- things that have to happen if the into is skipped
-		NPE_TutorialKeyboardMouseFrame:ShowHelpFrame()
+	local tutorialData = TutorialHelper:GetRacialData();
+	if tutorialData then
+		-- First Quest
+		local startingQuest = TutorialHelper:FilterByClass(tutorialData.StartingQuest);
+		if (not TutorialHelper:IsQuestCompleteOrActive(startingQuest)) then
+			Tutorials.Intro_Interact:Begin();
+		else -- things that have to happen if the into is skipped
+			NPE_TutorialKeyboardMouseFrame:ShowHelpFrame()
+		end
 	end
 
 	-- Callout what button to click on to accept a quest
@@ -2721,6 +2815,9 @@ end
 -- ------------------------------------------------------------------------------------------------------------
 function Tutorials:Quest_Accepted(questData)
 	local tutorialData = TutorialHelper:GetRacialData();
+	if not tutorialData then
+		return;
+	end
 	local questID = questData.QuestID;
 
 	-- -----------------------------------------------
@@ -2895,14 +2992,18 @@ end
 function Tutorials:Quest_ObjectivesComplete(questData)
 	local questID = questData.QuestID;
 	local tutorialData = TutorialHelper:GetRacialData();
+	if not tutorialData then
+		return;
+	end
 
 	-- -----------------------------------------------
 	-- All active quests complete
 	local allQuestsReadyForTurnIn = true;
 
-	for i = 1, GetNumQuestLogEntries() do
-		local title, level, suggestedGroup, isHeader, isCollapsed, isComplete, frequency, questID = GetQuestLogTitle(i);
-		if ((not isHeader) and (GetQuestTagInfo(questID) ~= QUEST_TAG_ACCOUNT) and (not isComplete)) then
+	for i = 1, C_QuestLog.GetNumQuestLogEntries() do
+		local questID = C_QuestLog.GetQuestIDForLogIndex(i);
+		-- Only check valid non-account quests.
+		if questID and not C_QuestLog.IsAccountQuest(questID) and not C_QuestLog.ReadyForTurnIn(questID) then
 			allQuestsReadyForTurnIn = false;
 			break;
 		end
@@ -2938,6 +3039,9 @@ end
 -- ------------------------------------------------------------------------------------------------------------
 function Tutorials:Quest_TurnedIn(questData)
 	local tutorialData = TutorialHelper:GetRacialData();
+	if not tutorialData then
+		return;
+	end
 
 	-- -----------------------------------------------
 	-- close the Open Map prompt if it's still up when they complete a quest
@@ -3042,7 +3146,9 @@ end
 function TutorialStatus()
 	print("---------------------------------------")
 	for k, v in pairs(Tutorials) do
-		print(v.IsActive and "+ ACTIVE" or "- INACTIVE", k);
+		if (type(v) == "table") then
+			print(v.IsActive and "+ ACTIVE" or "- INACTIVE", k);
+		end
 	end
 end
 

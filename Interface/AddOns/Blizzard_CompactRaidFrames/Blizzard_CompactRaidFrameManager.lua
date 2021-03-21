@@ -16,13 +16,13 @@ local RESIZE_HORIZONTAL_OUTSETS = 4;
 local RESIZE_VERTICAL_OUTSETS = 7;
 
 function CompactRaidFrameManager_OnLoad(self)
-	self:SetBackdropColor(TOOLTIP_DEFAULT_BACKGROUND_COLOR.r, TOOLTIP_DEFAULT_BACKGROUND_COLOR.g, TOOLTIP_DEFAULT_BACKGROUND_COLOR.b);
 	self.container = CompactRaidFrameContainer;
 	self.container:SetParent(self);
 	
 	self:RegisterEvent("DISPLAY_SIZE_CHANGED");
 	self:RegisterEvent("UI_SCALE_CHANGED");
 	self:RegisterEvent("GROUP_ROSTER_UPDATE");
+	self:RegisterEvent("UPDATE_ACTIVE_BATTLEFIELD");
 	self:RegisterEvent("UNIT_FLAGS");
 	self:RegisterEvent("PLAYER_FLAGS_CHANGED");
 	self:RegisterEvent("PLAYER_ENTERING_WORLD");
@@ -30,7 +30,7 @@ function CompactRaidFrameManager_OnLoad(self)
 	self:RegisterEvent("RAID_TARGET_UPDATE");
 	self:RegisterEvent("PLAYER_TARGET_CHANGED");
 	
-	self.containerResizeFrame:SetMinResize(self.container:GetWidth(), MINIMUM_RAID_CONTAINER_HEIGHT + RESIZE_VERTICAL_OUTSETS * 2);
+	self.containerResizeFrame:SetMinResize(self.container:GetWidth(), MINIMUM_RAID_CONTAINER_HEIGHT + RESIZE_VERTICAL_OUTSETS * 2 + 1);
 	self.dynamicContainerPosition = true;
 	
 	CompactRaidFrameContainer_SetFlowFilterFunction(self.container, CRFFlowFilterFunc)
@@ -49,7 +49,7 @@ local settings = { --[["Managed",]] "Locked", "SortMode", "KeepGroupsTogether", 
 function CompactRaidFrameManager_OnEvent(self, event, ...)
 	if ( event == "DISPLAY_SIZE_CHANGED" or event == "UI_SCALE_CHANGED" ) then
 		CompactRaidFrameManager_UpdateContainerBounds(self);
-	elseif ( event == "GROUP_ROSTER_UPDATE" ) then
+	elseif ( event == "GROUP_ROSTER_UPDATE" or event == "UPDATE_ACTIVE_BATTLEFIELD" ) then
 		CompactRaidFrameManager_UpdateShown(self);
 		CompactRaidFrameManager_UpdateDisplayCounts(self);
 		CompactRaidFrameManager_UpdateLabel(self);
@@ -217,9 +217,13 @@ function CompactRaidFrameManager_UpdateOptionsFlowContainer(self)
 	if ( IsInGroup() and (UnitIsGroupLeader("player") or UnitIsGroupAssistant("player")) ) then
 		self.displayFrame.leaderOptions.readyCheckButton:Enable();
 		self.displayFrame.leaderOptions.readyCheckButton:SetAlpha(1);
+		self.displayFrame.leaderOptions.countdownButton:Enable(); 
+		self.displayFrame.leaderOptions.countdownButton:SetAlpha(1);
 	else
 		self.displayFrame.leaderOptions.readyCheckButton:Disable();
 		self.displayFrame.leaderOptions.readyCheckButton:SetAlpha(0.5);
+		self.displayFrame.leaderOptions.countdownButton:Disable(); 
+		self.displayFrame.leaderOptions.countdownButton:SetAlpha(0.5);
 	end
 end
 

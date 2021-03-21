@@ -38,6 +38,10 @@ PowerBarColor[13] = PowerBarColor["INSANITY"];
 PowerBarColor[17] = PowerBarColor["FURY"];
 PowerBarColor[18] = PowerBarColor["PAIN"];
 
+function GetPowerBarColor(powerType)
+	return PowerBarColor[powerType];
+end
+
 --[[
 	This system uses "update" functions as OnUpdate, and OnEvent handlers.
 	This "Initialize" function registers the events to handle.
@@ -119,9 +123,10 @@ function UnitFrame_Initialize (self, unit, name, portrait, healthbar, healthtext
 	self:RegisterForClicks("LeftButtonUp", "RightButtonUp");
 	self:RegisterEvent("UNIT_NAME_UPDATE");
 	self:RegisterEvent("UNIT_DISPLAYPOWER");
-	self:RegisterEvent("UNIT_PORTRAIT_UPDATE");
+	self:RegisterEvent("UNIT_PORTRAIT_UPDATE")
+	self:RegisterEvent("PORTRAITS_UPDATED");
 	if ( self.healAbsorbBar ) then
-		self:RegisterUnitEvent("UNIT_HEAL_ABSORB_AMOUNT_CHANGED");
+		self:RegisterUnitEvent("UNIT_HEAL_ABSORB_AMOUNT_CHANGED", unit);
 	end
 	if ( self.myHealPredictionBar ) then
 		self:RegisterUnitEvent("UNIT_MAXHEALTH", unit);
@@ -155,10 +160,14 @@ function UnitFrame_SetUnit (self, unit, healthbar, manabar)
 			UnitFrameManaBar_RegisterDefaultEvents(manabar);
 		end
 		healthbar:RegisterUnitEvent("UNIT_MAXHEALTH", unit);
+		
+		if ( self.PlayerFrameHealthBarAnimatedLoss ) then
+			self.PlayerFrameHealthBarAnimatedLoss:SetUnitHealthBar(unit, healthbar);
+		end
 	end
 
 	self.unit = unit;
-	healthbar.unit = unit;
+	UnitFrameHealthBar_SetUnit(healthbar, unit)
 	if ( manabar ) then	--Party Pet frames don't have a mana bar.
 		manabar.unit = unit;
 	end
@@ -197,10 +206,10 @@ function UnitFramePortrait_Update (self)
 end
 
 function UnitFrame_OnEvent(self, event, ...)
-	local arg1 = ...
+	local eventUnit = ...
 
 	local unit = self.unit;
-	if ( arg1 == unit ) then
+	if ( eventUnit == unit ) then
 		if ( event == "UNIT_NAME_UPDATE" ) then
 			self.name:SetText(GetUnitName(unit));
 		elseif ( event == "UNIT_PORTRAIT_UPDATE" ) then
@@ -219,11 +228,10 @@ function UnitFrame_OnEvent(self, event, ...)
 		elseif ( event == "UNIT_HEAL_ABSORB_AMOUNT_CHANGED" ) then
 			UnitFrameHealPredictionBars_Update(self);
 		elseif ( event == "UNIT_SPELLCAST_START" or event == "UNIT_SPELLCAST_STOP" or event == "UNIT_SPELLCAST_FAILED" or event == "UNIT_SPELLCAST_SUCCEEDED" ) then
-			local name, nameSubtext, text, texture, startTime, endTime, isTradeSkill, castID, notInterruptible, spellID = UnitCastingInfo(unit);
+			local name, text, texture, startTime, endTime, isTradeSkill, castID, notInterruptible, spellID = UnitCastingInfo(unit);
 			UnitFrameManaCostPredictionBars_Update(self, event == "UNIT_SPELLCAST_START", startTime, endTime, spellID);
 		end
-	elseif ( not arg1 and event == "UNIT_PORTRAIT_UPDATE" ) then
-		-- this is an update all portraits signal
+	elseif ( event == "PORTRAITS_UPDATED" ) then
 		UnitFramePortrait_Update(self);
 	end
 end
@@ -378,7 +386,12 @@ function UnitFrameManaCostPredictionBars_Update(frame, isStarting, startTime, en
 
 	local cost = 0;
 	if (not isStarting or startTime == endTime) then
-		frame.predictedPowerCost = nil;
+        local currentSpellID = select(9, UnitCastingInfo(frame.unit));
+        if(currentSpellID and frame.predictedPowerCost) then --if we're currently casting something with a power cost, then whatever cast
+		    cost = frame.predictedPowerCost;                 --just finished was allowed while casting, don't reset the original cast
+        else
+            frame.predictedPowerCost = nil;
+        end
 	else
 		local costTable = GetSpellPowerCost(spellID);
 		for _, costInfo in pairs(costTable) do
@@ -436,28 +449,12 @@ function UnitFrameUtil_UpdateManaFillBar(frame, previousTexture, bar, amount, ba
 end
 
 function UnitFrame_OnEnter (self)
-	-- If showing newbie tips then only show the explanation
-	if ( SHOW_NEWBIE_TIPS == "1" ) then
-		if ( self == PlayerFrame ) then
-			GameTooltip_SetDefaultAnchor(GameTooltip, self);
-			GameTooltip_AddNewbieTip(self, PARTY_OPTIONS_LABEL, 1.0, 1.0, 1.0, NEWBIE_TOOLTIP_PARTYOPTIONS);
-			return;
-		elseif ( self == TargetFrame and UnitPlayerControlled("target") and not UnitIsUnit("target", "player") and not UnitIsUnit("target", "pet") ) then
-			GameTooltip_SetDefaultAnchor(GameTooltip, self);
-			GameTooltip_AddNewbieTip(self, PLAYER_OPTIONS_LABEL, 1.0, 1.0, 1.0, NEWBIE_TOOLTIP_PLAYEROPTIONS);
-			return;
-		end
-	end
 	UnitFrame_UpdateTooltip(self);
 end
 
 function UnitFrame_OnLeave (self)
 	self.UpdateTooltip = nil;
-	if ( SHOW_NEWBIE_TIPS == "1" ) then
-		GameTooltip:Hide();
-	else
-		GameTooltip:FadeOut();
-	end
+	GameTooltip:FadeOut();
 end
 
 function UnitFrame_UpdateTooltip (self)
@@ -521,7 +518,14 @@ function UnitFrameManaBar_UpdateType (manaBar)
 		if ( manaBar.FullPowerFrame ) then
 			manaBar.FullPowerFrame:RemoveAnims();
 		end
+		if manaBar.FeedbackFrame then
+			manaBar.FeedbackFrame:StopFeedbackAnim();
+		end
 		manaBar.currValue = UnitPower("player", powerType);
+		if unitFrame.myManaCostPredictionBar then
+			unitFrame.myManaCostPredictionBar:Hide();
+		end
+		unitFrame.predictedPowerCost = 0;
 	end
 
 	-- Update the manabar text
@@ -554,11 +558,9 @@ function UnitFrameHealthBar_Initialize (unit, statusbar, statustext, frequentUpd
 	if ( frequentUpdates ) then
 		statusbar:RegisterEvent("VARIABLES_LOADED");
 	end
-	if ( GetCVarBool("predictedHealth") and frequentUpdates ) then
-		statusbar:SetScript("OnUpdate", UnitFrameHealthBar_OnUpdate);
-	else
-		statusbar:RegisterUnitEvent("UNIT_HEALTH", unit);
-	end
+	
+	UnitFrameHealthBar_RefreshUpdateEvent(statusbar);
+
 	statusbar:RegisterUnitEvent("UNIT_MAXHEALTH", unit);
 	statusbar:SetScript("OnEvent", UnitFrameHealthBar_OnEvent);
 
@@ -572,19 +574,28 @@ function UnitFrameHealthBar_Initialize (unit, statusbar, statustext, frequentUpd
 	end
 end
 
+function UnitFrameHealthBar_RefreshUpdateEvent(self)
+	if ( GetCVarBool("predictedHealth") and self.frequentUpdates ) then
+		self:SetScript("OnUpdate", UnitFrameHealthBar_OnUpdate);
+		self:UnregisterEvent("UNIT_HEALTH");
+	else
+		self:SetScript("OnUpdate", nil);
+		self:RegisterUnitEvent("UNIT_HEALTH", self.unit);
+	end
+end
+
+function UnitFrameHealthBar_SetUnit(self, unit)
+	self.unit = unit;
+	UnitFrameHealthBar_RefreshUpdateEvent(self);
+end
+
 function UnitFrameHealthBar_OnEvent(self, event, ...)
 	if ( event == "CVAR_UPDATE" ) then
 		TextStatusBar_OnEvent(self, event, ...);
 	elseif ( event == "VARIABLES_LOADED" ) then
 		self:UnregisterEvent("VARIABLES_LOADED");
-		if ( GetCVarBool("predictedHealth") and self.frequentUpdates ) then
-			self:SetScript("OnUpdate", UnitFrameHealthBar_OnUpdate);
-			self:UnregisterEvent("UNIT_HEALTH");
-		else
-			self:RegisterUnitEvent("UNIT_HEALTH", self.unit);
-			self:SetScript("OnUpdate", nil);
-		end
-	else
+		UnitFrameHealthBar_RefreshUpdateEvent(self);
+	elseif self:IsShown() then
 		if ( not self.ignoreNoUnit or UnitGUID(self.unit) ) then
 			UnitFrameHealthBar_Update(self, ...);
 		end
@@ -682,7 +693,7 @@ function AnimatedHealthLossMixin:UpdateHealth(currentHealth, previousHealth)
 		-- and pause briefly when new damage occurs.
 		self.animationStartValue = self:GetHealthLossAnimationData(previousHealth, self.animationStartValue);
 		self.animationStartTime = GetTime() + self.animationPauseDelay;
-	elseif not hasLoss and hasStarted and currentHealth >= self.animationStartValue then
+	elseif not hasLoss and hasBegun and currentHealth >= self.animationStartValue then
 		self:CancelAnimation();
 	end
 end
@@ -776,11 +787,11 @@ function UnitFrameHealthBar_OnValueChanged(self, value)
 end
 
 function UnitFrameManaBar_UnregisterDefaultEvents(self)
-	self:UnregisterEvent("UNIT_POWER");
+	self:UnregisterEvent("UNIT_POWER_UPDATE");
 end
 
 function UnitFrameManaBar_RegisterDefaultEvents(self)
-	self:RegisterUnitEvent("UNIT_POWER", self.unit);
+	self:RegisterUnitEvent("UNIT_POWER_UPDATE", self.unit);
 end
 
 function UnitFrameManaBar_Initialize (unit, statusbar, statustext, frequentUpdates)
