@@ -6,7 +6,13 @@ QUEST_CHOICE_DIALOG_RESULT_DECLINED = 2;
 QUEST_CHOICE_DIALOG_RESULT_ABSTAIN = 3;
 
 function AdventureMapQuestChoiceDialogMixin:OnLoad()
-	self.rewardPool = CreateFramePool("FRAME", self, "AdventureMapQuestRewardTemplate", FramePool_HideAndClearAnchors);
+	self.rewardPool = CreateFramePool("FRAME", self, "AdventureMapQuestRewardTemplate", function(pool, reward) reward:OnReset(pool); end);
+end
+
+function AdventureMapQuestChoiceDialogMixin:OnParentHide(parent)
+	if parent == self:GetParent() then
+		self:DeclineQuest(true);
+	end
 end
 
 function AdventureMapQuestChoiceDialogMixin:ShowWithQuest(parent, anchorRegion, questID, onClosedCallback, animDelay)
@@ -22,6 +28,7 @@ function AdventureMapQuestChoiceDialogMixin:ShowWithQuest(parent, anchorRegion, 
 	self.onClosedCallback = onClosedCallback;
 
 	self:ClearAllPoints();
+	self.anchorRegion = anchorRegion;
 	self:SetPoint("CENTER", anchorRegion);
 
 	if newQuest then
@@ -50,16 +57,22 @@ function AdventureMapQuestChoiceDialogMixin:OnEvent(event, ...)
 		if questID == self.questID then
 			self:Refresh();
 		end
+	elseif event == "QUEST_LOG_UPDATE" then
+		-- unfortunately have to use generic event to update in case of rewards being loaded async
+		self:Refresh();
 	end
 end
 
 function AdventureMapQuestChoiceDialogMixin:OnShow()
 	self:RegisterEvent("ADVENTURE_MAP_QUEST_UPDATE");
+	self:RegisterEvent("QUEST_LOG_UPDATE");
 	self:Refresh();
+	self.Details:SetVerticalScroll(0);
 end
 
 function AdventureMapQuestChoiceDialogMixin:OnHide()
 	self:UnregisterEvent("ADVENTURE_MAP_QUEST_UPDATE");
+	self:UnregisterEvent("QUEST_LOG_UPDATE");
 
 	self:Finalize();
 end
@@ -96,19 +109,24 @@ function AdventureMapQuestChoiceDialogMixin:RefreshRewards()
 	end
 
 	local xp = GetQuestLogRewardXP(self.questID);
-	if xp > 0 and UnitLevel("player") < MAX_PLAYER_LEVEL then
+	if xp > 0 and not IsPlayerAtEffectiveMaxLevel() then
 		self:AddReward(BreakUpLargeNumbers(xp), "Interface\\Icons\\XP_Icon", nil, 0, "NumberFontNormal");
 	end
 
-	for currencyIndex = 1, GetNumQuestLogRewardCurrencies(self.questID) do
-		local name, texture, count = GetQuestLogRewardCurrencyInfo(currencyIndex, self.questID);
-		self:AddReward(name, texture, nil, count, "GameFontHighlightSmall");
+	for index, currencyReward in ipairs(C_QuestLog.GetQuestRewardCurrencies(self.questID)) do
+		local rewardFrame = self:AddReward(currencyReward.name, currencyReward.texture, nil, currencyReward.totalRewardAmount, "GameFontHighlightSmall");
+		local currencyColor = GetColorForCurrencyReward(currencyReward.currencyID, currencyReward.totalRewardAmount);
+		rewardFrame.Count:SetTextColor(currencyColor:GetRGB());
+		rewardFrame.rewardType = "currency";
+		rewardFrame.rewardIndex = index;
 	end
 
-	for itemIndex = 1, GetNumQuestLogRewards(questID) do
+	for itemIndex = 1, GetNumQuestLogRewards(self.questID) do
 		local name, texture, count, quality, isUsable = GetQuestLogRewardInfo(itemIndex, self.questID);
-		self:AddReward(name, texture, nil, count, "GameFontHighlightSmall");
-	end	
+		local rewardFrame = self:AddReward(name, texture, nil, count, "GameFontHighlightSmall");
+		rewardFrame.rewardType = "item";
+		rewardFrame.rewardIndex = itemIndex;
+	end
 
 	local money = GetQuestLogRewardMoney(self.questID);
 	if money > 0  then
@@ -118,10 +136,13 @@ function AdventureMapQuestChoiceDialogMixin:RefreshRewards()
 	local numActiveRewardFrames = self.rewardPool:GetNumActive();
 	if numActiveRewardFrames == 0 then
 		self.Rewards:Hide();
+		self.RewardsHeader:Hide();
 		self.rewardsHeight = 0;
 	else
 		self.Rewards:Show();
-		local _, _, height = GetAtlasInfo("AdventureMapQuest-RewardsPanel");
+		self.RewardsHeader:Show();
+		local info = C_Texture.GetAtlasInfo("AdventureMapQuest-RewardsPanel");
+		local height = info and info.height or 1; -- prevent divide by 0
 		self.rewardsHeight = math.min(math.ceil(numActiveRewardFrames / 2) * (REWARD_FRAME_HEIGHT + REWARD_FRAME_PADDING) + 53, height);
 		self.Rewards:SetHeight(self.rewardsHeight);
 		self.Rewards:SetTexCoord(0, 1, 0, self.rewardsHeight / height);
@@ -149,22 +170,67 @@ function AdventureMapQuestChoiceDialogMixin:AddReward(label, texture, overlayTex
 			rewardFrame.Overlay:Hide();
 		end
 		rewardFrame.Count:SetText(count > 0 and count or nil);
+		rewardFrame.Count:SetTextColor(HIGHLIGHT_FONT_COLOR:GetRGB());
 		rewardFrame.tooltipText = tooltipText;
 
 		rewardFrame:Show();
+		return rewardFrame;
 	end
+	return nil;
 end
 
-local MAX_DETAILS_HEIGHT = 304;
+-- There are 2 versions of the frame because the background can't be tiled or stretched too much.
+local HEIGHT_SHORT = 380;
+local HEIGHT_LONG = 456;				-- used when both rewards and widgets are present
+local HEIGHT_UNUSABLE_SPACE = 78;		-- the art includes the border plus empty space above & below
+local WIDGET_VERTICAL_ADJUSTMENT = -16;	-- adjustment when calculating widget height
+local REWARDS_VERTICAL_ADJUSTMENT = 8;	-- adjustment when calculating rewards height
+
 function AdventureMapQuestChoiceDialogMixin:RefreshDetails()
 	local questTitle, descriptionText, objectiveText = C_AdventureMap.GetQuestInfo(self.questID);
 	if descriptionText then
-		self.Details:SetHeight(MAX_DETAILS_HEIGHT - self.rewardsHeight);
+		local widgetSetID = C_TaskQuest.GetQuestUIWidgetSetByType(self.questID, Enum.MapIconUIWidgetSetType.AdventureMapDetails);
+		if widgetSetID then
+			if not self.widgetContainer then
+				self.widgetContainer = CreateFrame("FRAME", nil, self, "UIWidgetContainerTemplate");
+				self.widgetContainer.verticalAnchorPoint = "TOP";
+				self.widgetContainer.verticalRelativePoint = "BOTTOM";
+				self.widgetContainer.showAndHideOnWidgetSetRegistration = false;
+			end
+			self.widgetContainer:RegisterForWidgetSet(widgetSetID);
+		elseif self.widgetContainer then
+			self.widgetContainer:UnregisterForWidgetSet();
+		end
+
+		local frameHeight;
+		local hasWidgets = self.widgetContainer and self.widgetContainer.numWidgetsShowing and self.widgetContainer.numWidgetsShowing > 0;
+		local hasRewards = self.Rewards:IsShown();
+		if hasWidgets and hasRewards then
+			frameHeight = HEIGHT_LONG;
+			self.widgetContainer:SetPoint("BOTTOM", self.RewardsHeader, "TOP", 0, 12);
+			self.Background:SetAtlas("AdventureMapQuest-QuestPane-9sliced", TextureKitConstants.UseAtlasSize);
+		else
+			frameHeight = HEIGHT_SHORT;
+			if hasWidgets then
+				self.widgetContainer:SetPoint("BOTTOM", 0, 36);
+			end
+			self.Background:SetAtlas("AdventureMapQuest-QuestPane", TextureKitConstants.UseAtlasSize);
+		end
+
+		self:SetHeight(frameHeight);
+		local detailsHeight = frameHeight - HEIGHT_UNUSABLE_SPACE;
+		if hasWidgets then
+			detailsHeight = detailsHeight - self.widgetContainer:GetHeight() + WIDGET_VERTICAL_ADJUSTMENT;
+		end
+		if hasRewards then
+			detailsHeight = detailsHeight - self.rewardsHeight + REWARDS_VERTICAL_ADJUSTMENT;
+		end
+		self.Details:SetHeight(detailsHeight);
 
 		self.Details.Child.TitleHeader:SetText(questTitle);
 		self.Details.Child.DescriptionText:SetText(descriptionText);
 		self.Details.Child.ObjectivesText:SetText(objectiveText);
-		
+
 		local height = 45;
 		for i, element in ipairs(self.Details.Child.Elements) do
 			height = height + element:GetHeight();
@@ -172,7 +238,18 @@ function AdventureMapQuestChoiceDialogMixin:RefreshDetails()
 		self.Details.Child:SetHeight(height);
 
 		self.Details:Show();
+
+		local portraitInfo = C_AdventureMap.GetQuestPortraitInfo(self.questID);
+		if portraitInfo and portraitInfo.portraitDisplayID ~= 0 then
+			QuestFrame_ShowQuestPortrait(self, portraitInfo.portraitDisplayID, portraitInfo.mountPortraitDisplayID, portraitInfo.modelSceneID, portraitInfo.text, portraitInfo.name, -0, -27, true);
+			local xOffset = QuestModelScene:GetWidth() / 2;
+			self:SetPoint("CENTER", self.anchorRegion, -xOffset , 0);
+		else
+			QuestFrame_HideQuestPortrait();
+			self:SetPoint("CENTER", self.anchorRegion, 0, 0);
+		end
 	else
+		QuestFrame_HideQuestPortrait();
 		self.Details:Hide();
 	end
 end
@@ -190,4 +267,26 @@ function AdventureMapQuestChoiceDialogMixin:DeclineQuest(abstain)
 		self.result = QUEST_CHOICE_DIALOG_RESULT_DECLINED;
 	end
 	AdventureMapQuestChoiceDialog:Hide();
+end
+
+AdventureMapQuestRewardMixin = { };
+
+function AdventureMapQuestRewardMixin:OnEnter()
+	if self.tooltipText then
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
+		GameTooltip:SetText(self.tooltipText, HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b, nil, true);
+	elseif self.rewardType then
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
+		if self.rewardType == "item" then
+			GameTooltip:SetQuestLogItem("reward", self.rewardIndex, self:GetParent().questID);
+		elseif self.rewardType == "currency" then
+			GameTooltip:SetQuestLogCurrency("reward", self.rewardIndex, self:GetParent().questID);
+		end
+	end
+end
+
+function AdventureMapQuestRewardMixin:OnReset(pool)
+	Pool_HideAndClearAnchors(pool, self);
+	self.rewardType = nil;
+	self.rewardIndex = nil;
 end

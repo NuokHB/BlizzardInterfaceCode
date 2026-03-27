@@ -43,7 +43,7 @@ function InspectPaperDollFrame_SetLevel()
 	elseif ( effectiveLevel ~= level ) then
 		level = EFFECTIVE_LEVEL_FORMAT:format(effectiveLevel, level);
 	end
-	
+
 	if (specName and specName ~= "") then
 		InspectLevelText:SetFormattedText(PLAYER_LEVEL, level, classColorString, specName, classDisplayName);
 	else
@@ -70,6 +70,8 @@ function InspectPaperDollFrame_UpdateButtons()
 	InspectPaperDollItemSlotButton_Update(InspectTrinket1Slot);
 	InspectPaperDollItemSlotButton_Update(InspectMainHandSlot);
 	InspectPaperDollItemSlotButton_Update(InspectSecondaryHandSlot);
+
+	InspectPaperDollItemsFrame.InspectTalents:SetEnabled(C_Traits.HasValidInspectData());
 end
 
 local factionLogoTextures = {
@@ -122,12 +124,26 @@ end
 
 function InspectPaperDollItemSlotButton_OnEvent(self, event, ...)
 	if ( event == "UNIT_INVENTORY_CHANGED" ) then
-		local arg1 = ...;
-		if ( arg1 == InspectFrame.unit ) then
+		local unit = ...;
+		if ( unit == InspectFrame.unit ) then
 			InspectPaperDollItemSlotButton_Update(self);
 		end
 		return;
 	end
+end
+
+function InspectPaperDollItemSlotButton_OnClick(self, button)
+	local itemLink = GetInventoryItemLink(InspectFrame.unit, self:GetID());
+	if itemLink and IsModifiedClick("EXPANDITEM") then
+		local _, _, classID = UnitClass(InspectFrame.unit); 
+		if C_AzeriteEmpoweredItem.IsAzeriteEmpoweredItemByID(itemLink) then
+			local azeritePowerIDs = C_PaperDollInfo.GetInspectAzeriteItemEmpoweredChoices(InspectFrame.unit, self:GetID());
+			OpenAzeriteEmpoweredItemUIFromLink(itemLink, classID, azeritePowerIDs);
+			return;
+		end
+	end
+
+	HandleModifiedItemClick(GetInventoryItemLink(InspectFrame.unit, self:GetID()));
 end
 
 function InspectPaperDollItemSlotButton_OnEnter(self)
@@ -154,7 +170,7 @@ function InspectPaperDollItemSlotButton_Update(button)
 		SetItemButtonQuality(button, quality, GetInventoryItemID(unit, button:GetID()));
 
 	else
-		local textureName = button.backgroundTextureName;
+		textureName = button.backgroundTextureName;
 		if ( button.checkRelic and UnitHasRelicSlot(unit) ) then
 			textureName = "Interface\\Paperdoll\\UI-PaperDoll-Slot-Relic.blp";
 		end
@@ -166,6 +182,10 @@ function InspectPaperDollItemSlotButton_Update(button)
 	if ( GameTooltip:IsOwned(button) ) then
 		GameTooltip:Hide();
 	end
+
+	if button.SocketDisplay then
+		button.SocketDisplay:SetItem(GetInventoryItemLink(unit, button:GetID()));
+	end
 end
 
 function InspectPaperDollViewButton_OnLoad(self)
@@ -173,6 +193,45 @@ function InspectPaperDollViewButton_OnLoad(self)
 end
 
 function InspectPaperDollViewButton_OnClick(self)
-	PlaySound("igMainMenuOptionCheckBoxOn");
-	DressUpSources(C_TransmogCollection.GetInspectSources());
+	PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON);
+	DressUpItemTransmogInfoList(C_TransmogCollection.GetInspectItemTransmogInfoList());
+end
+
+InspectPaperDollFrameTalentsButtonMixin = {};
+
+function InspectPaperDollFrameTalentsButtonMixin:OnClick()
+	if C_Traits.HasValidInspectData() then
+		PlayerSpellsFrame_LoadUI();
+
+		local inspectUnit = InspectFrame.unit;
+		PlayerSpellsUtil.OpenToClassTalentsTab(inspectUnit);
+	end
+end
+
+function InspectPaperDollFrameTalentsButtonMixin:OnEnter()
+	local hasValidInspectData = C_Traits.HasValidInspectData();
+	self:SetEnabled(hasValidInspectData);
+	if not hasValidInspectData then
+		GameTooltip:SetOwner(self);
+		GameTooltip_AddErrorLine(GameTooltip, UNAVAILABLE);
+		GameTooltip:Show();
+	end
+end
+
+function InspectPaperDollFrameTalentsButtonMixin:OnLeave()
+	GameTooltip_Hide();
+end
+
+LevelTextMixin = {}
+
+function LevelTextMixin:OnEnter()
+	if ( InspectLevelText:IsTruncated() ) then
+		GameTooltip:SetOwner(InspectLevelText, "ANCHOR_RIGHT");
+		GameTooltip_AddNormalLine(GameTooltip, InspectLevelText:GetText(), false);
+		GameTooltip:Show();
+	end
+end
+
+function LevelTextMixin:OnLeave()
+	GameTooltip:Hide();	
 end

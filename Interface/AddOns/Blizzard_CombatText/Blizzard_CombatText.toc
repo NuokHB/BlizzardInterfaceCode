@@ -1,6 +1,9 @@
-## Interface: 70000
 ## Title: Blizzard CombatText
-## Secure: 1
 ## LoadOnDemand: 1
-Blizzard_CombatText.xml
-Localization.lua
+
+Shared\CombatTextConstants.lua
+[Family]\CombatTextConstantsOverrides.lua
+Shared\CombatTextUtil.lua
+[Family]\CombatTextUtilOverrides.lua
+Shared\CombatText.lua
+Shared\CombatText.xml

@@ -1,6 +1,5 @@
-## Interface: 70000
 ## Title: Black Market UI
-## Secure: 1
 ## LoadOnDemand: 1
+## Dependencies: Blizzard_Colors
 Blizzard_BlackMarketUI.xml
 Localization.lua

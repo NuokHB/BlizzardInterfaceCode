@@ -7,8 +7,8 @@ function AdventureMapMixin:SetupTitle()
 	self.BorderFrame.Bg:SetColorTexture(0, 0, 0, 1);
 	self.BorderFrame.Bg:SetParent(self);
 	self.BorderFrame.TopTileStreaks:Hide();
-	
-	SetPortraitToTexture(self.BorderFrame.portrait, [[Interface/Icons/inv_misc_map02]]);
+
+	self.BorderFrame:SetPortraitToAsset([[Interface/Icons/inv_misc_map02]]);
 end
 
 -- Override
@@ -19,14 +19,17 @@ function AdventureMapMixin:OnLoad()
 	self:SetMapInsetPool(mapInsetPool);
 
 	self:RegisterEvent("ADVENTURE_MAP_UPDATE_INSETS");
-	
+
 	self:SetupTitle();
 
 	self:AddStandardDataProviders();
+	self:ClearAreaTableIDAvailableForInsets();
 end
 
 function AdventureMapMixin:AddStandardDataProviders()
 	self:AddDataProvider(CreateFromMixins(AdventureMap_QuestChoiceDataProviderMixin));
+	self:AddDataProvider(CreateFromMixins(AdventureMap_QuestOfferDataProviderMixin));
+	self:AddDataProvider(CreateFromMixins(QuestSessionDataProviderMixin));
 end
 
 function AdventureMapMixin:ClearAreaTableIDAvailableForInsets()
@@ -39,9 +42,9 @@ end
 
 -- Override
 function AdventureMapMixin:OnShow()
-	local continentID = C_AdventureMap.GetContinentInfo();
-	self:SetMapID(continentID);
+	local mapID = C_AdventureMap.GetMapID();
 	self:ClearAreaTableIDAvailableForInsets();
+	self:SetMapID(mapID);
 	MapCanvasMixin.OnShow(self);
 end
 
@@ -49,6 +52,7 @@ end
 function AdventureMapMixin:OnHide()
 	MapCanvasMixin.OnHide(self);
 
+	AdventureMapQuestChoiceDialog:OnParentHide(self);
 	C_AdventureMap.Close();
 end
 
@@ -65,10 +69,14 @@ end
 function AdventureMapMixin:RefreshInsets()
 	MapCanvasMixin.RefreshInsets(self);
 
-	for insetIndex = 1, C_AdventureMap.GetNumMapInsets() do
-		local mapID, title, description, collapsedIcon, areaTableID, numDetailTiles, normalizedX, normalizedY = C_AdventureMap.GetMapInsetInfo(insetIndex);
-		if (self.areaTableIDsToDisplay[areaTableID]) then
-			self:AddInset(insetIndex, mapID, title, description, collapsedIcon, numDetailTiles, normalizedX, normalizedY);
+	local numInsets = C_AdventureMap.GetNumMapInsets();
+
+	if numInsets and numInsets > 0 then
+		for insetIndex = 1, numInsets do
+			local mapID, title, description, collapsedIcon, areaTableID, numDetailTiles, normalizedX, normalizedY = C_AdventureMap.GetMapInsetInfo(insetIndex);
+			if (self.areaTableIDsToDisplay[areaTableID]) then
+				self:AddInset(insetIndex, mapID, title, description, collapsedIcon, numDetailTiles, normalizedX, normalizedY);
+			end
 		end
 	end
 end

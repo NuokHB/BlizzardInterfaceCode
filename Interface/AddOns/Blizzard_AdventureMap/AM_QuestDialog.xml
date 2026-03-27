@@ -1,8 +1,8 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/
-..\FrameXML\UI.xsd">
+..\..\..\..\..\WoW\Data\Interface\AddOns\Blizzard_SharedXML\UI.xsd">
 	<Script file="AM_QuestDialog.lua"/>
-	
-	<Button name="AdventureMapQuestRewardTemplate" enableMouse="true" virtual="true">
+
+	<Button name="AdventureMapQuestRewardTemplate" mixin="AdventureMapQuestRewardMixin" enableMouse="true" virtual="true">
 		<Size x="135" y="41" />
 		<Layers>
 			<Layer level="BACKGROUND">
@@ -42,32 +42,19 @@
 			</Layer>
 		</Layers>
 		<Scripts>
-			<OnEnter>
-				if self.tooltipText then
-					GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
-					GameTooltip:SetText(self.tooltipText, HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b, nil, true);
-				end
-			</OnEnter>
-
+			<OnEnter method="OnEnter"/>
 			<OnLeave function="GameTooltip_Hide" />
 		</Scripts>
 	</Button>
 
 	<Frame name="AdventureMapQuestChoiceDialog" hidden="true" enableMouse="true" mixin="AdventureMapQuestChoiceDialogMixin">
+		<!-- The height of this can be changed by RefreshDetails -->
 		<Size x="295" y="380" />
 		<Anchors>
 			<Anchor point="CENTER" />
 		</Anchors>
-		
+
 		<Layers>
-			<Layer level="BACKGROUND" textureSubLevel="-1">
-				<Texture parentKey="PortraitBg" atlas="AdventureMapQuest-PortraitBG" useAtlasSize="true">
-					<Anchors>
-						<Anchor point="CENTER" relativePoint="TOP" y="-17" />
-					</Anchors>
-				</Texture>
-			</Layer>
-			
 			<Layer level="BACKGROUND" textureSubLevel="1">
 				<Texture parentKey="Portrait" />
 
@@ -91,7 +78,7 @@
 						<Anchor point="TOPLEFT" relativeKey="$parent.Rewards" y="-10" />
 						<Anchor point="BOTTOMRIGHT" relativeKey="$parent.Rewards" relativePoint="TOPRIGHT" y="-42" />
 					</Anchors>
-					<Color r="1.0" g="0.9294" b="0.7607"/>
+					<Color color="AREA_NAME_FONT_COLOR"/>
 				</FontString>
 			</Layer>
 		</Layers>
@@ -99,120 +86,31 @@
 		<Frames>
 			<Button inherits="UIPanelCloseButton" parentKey="CloseButton">
 				<Anchors>
-					<Anchor point="TOPRIGHT" x="3" y="-9" />
+					<Anchor point="TOPRIGHT" x="-3" y="-14" />
 				</Anchors>
 				<Scripts>
 					<OnClick>
-						PlaySound("igQuestCancel");
+						PlaySound(SOUNDKIT.IG_QUEST_CANCEL);
 						self:GetParent():DeclineQuest();
 					</OnClick>
 				</Scripts>
 			</Button>
 
-			<ScrollFrame parentKey="Details" inherits="UIPanelScrollFrameCodeTemplate">
+			<ScrollFrame parentKey="Details" inherits="ScrollFrameTemplate">
+				<KeyValues>
+					<KeyValue key="scrollBarHideIfUnscrollable" value="true" type="boolean"/>
+					<KeyValue key="scrollBarX" value="10" type="number"/>
+					<KeyValue key="scrollBarTopY" value="6" type="number"/>
+					<KeyValue key="scrollBarBottomY" value="-6" type="number"/>
+				</KeyValues>
 				<Size x="253" y="212"/>
 				<Anchors>
 					<Anchor point="TOPLEFT" x="12" y="-50"/>
 				</Anchors>
-
-				<KeyValues>
-					<KeyValue key="scrollBarHideable" value="true" type="boolean" />
-				</KeyValues>
-
-				<Frames>
-					<Slider parentKey="ScrollBar">
-						<Size x="16" y="0"/>
-						<Anchors>
-							<Anchor point="TOPLEFT" relativePoint="TOPRIGHT" x="6" y="-6"/>
-							<Anchor point="BOTTOMLEFT" relativePoint="BOTTOMRIGHT" x="6" y="6"/>
-						</Anchors>
-						
-						<Frames>
-							<Button parentKey="ScrollUpButton" inherits="UIPanelScrollUpButtonTemplate">
-								<Anchors>
-									<Anchor point="BOTTOM" relativePoint="TOP" x="0" y="-2"/>
-								</Anchors>
-								<Scripts>
-									<OnClick>
-										local parent = self:GetParent();
-										local scrollStep = self:GetParent().scrollStep or (parent:GetHeight() / 2);
-										parent:SetValue(parent:GetValue() - scrollStep);
-										PlaySound("UChatScrollButton");
-									</OnClick>
-								</Scripts>
-							</Button>
-							<Button parentKey="ScrollDownButton" inherits="UIPanelScrollDownButtonTemplate">
-								<Anchors>
-									<Anchor point="TOP" relativePoint="BOTTOM" x="0" y="2"/>
-								</Anchors>
-								<Scripts>
-									<OnClick>
-										local parent = self:GetParent();
-										local scrollStep = self:GetParent().scrollStep or (parent:GetHeight() / 2);
-										parent:SetValue(parent:GetValue() + scrollStep);
-										PlaySound("UChatScrollButton");
-									</OnClick>
-								</Scripts>
-							</Button>
-						</Frames>
-
-						<Layers>
-							<Layer level="ARTWORK">
-								<Texture parentKey="Top" file="Interface\PaperDollInfoFrame\UI-Character-ScrollBar">
-									<Size x="24" y="48"/>
-									<Anchors>
-										<Anchor point="TOPLEFT" x="-4" y="17"/>
-									</Anchors>
-									<TexCoords left="0" right="0.45" top="0" bottom=".20"/>
-								</Texture>
-								<Texture parentKey="Bottom" file="Interface\PaperDollInfoFrame\UI-Character-ScrollBar">
-									<Size x="24" y="64"/>
-									<Anchors>
-										<Anchor point="BOTTOMLEFT" x="-4" y="-15"/>
-									</Anchors>
-									<TexCoords left="0.515625" right="0.97" top="0.1440625" bottom="0.4140625"/>
-								</Texture>
-								<Texture parentKey="Middle" file="Interface\PaperDollInfoFrame\UI-Character-ScrollBar">
-									<Anchors>
-										<Anchor point="TOPLEFT" relativeKey="$parent.Top" relativePoint="BOTTOMLEFT"/>
-										<Anchor point="BOTTOMRIGHT" relativeKey="$parent.Bottom" relativePoint="TOPRIGHT"/>
-									</Anchors>
-									<TexCoords left="0" right="0.45" top="0.1640625" bottom="1"/>
-								</Texture>
-							</Layer>
-							<Layer level="ARTWORK" textureSubLevel="-1">
-								<Texture parentKey="Background">
-									<Anchors>
-										<Anchor point="TOPLEFT" relativeKey="$parent.Top" x="3" />
-										<Anchor point="BOTTOMRIGHT" relativeKey="$parent.Bottom" x="-3"/>
-									</Anchors>
-									<Color r="0" g="0" b="0" a="1"/>
-								</Texture>
-							</Layer>
-						</Layers>
-						
-						<Scripts>
-							<OnValueChanged>
-								self:GetParent():SetVerticalScroll(value);
-							</OnValueChanged>
-						</Scripts>
-						
-						<ThumbTexture parentKey="ThumbTexture" inherits="UIPanelScrollBarButton" file="Interface\Buttons\UI-ScrollBar-Knob">
-							<Size x="18" y="24"/>
-							<TexCoords left="0.20" right="0.80" top="0.125" bottom="0.875"/>
-						</ThumbTexture>
-					</Slider>
-				</Frames>
-				
 				<ScrollChild>
 					<Frame parentKey="Child">
 						<Size x="255" y="1"/>
 						<Layers>
-							<Layer level="OVERLAY" textureSubLevel="1">
-								<Texture>
-									<Color r="1" g="0" b="0" a=".0"/>
-								</Texture>
-							</Layer>
 							<Layer level="BACKGROUND">
 								<FontString parentKey="TitleHeader" parentArray="Elements" inherits="QuestTitleFont" justifyH="LEFT">
 									<Anchors>
@@ -249,11 +147,11 @@
 			<Button parentKey="DeclineButton" inherits="UIPanelButtonTemplate" text="DECLINE">
 				<Size x="78" y="22"/>
 				<Anchors>
-					<Anchor point="BOTTOMRIGHT" x="-6" y="2"/>
+					<Anchor point="BOTTOMRIGHT" x="-6" y="4"/>
 				</Anchors>
 				<Scripts>
 					<OnClick>
-						PlaySound("igQuestCancel");
+						PlaySound(SOUNDKIT.IG_QUEST_CANCEL);
 						self:GetParent():DeclineQuest();
 					</OnClick>
 				</Scripts>
@@ -261,7 +159,7 @@
 			<Button parentKey="AcceptButton" inherits="UIPanelButtonTemplate" text="ACCEPT">
 				<Size x="77" y="22"/>
 				<Anchors>
-					<Anchor point="BOTTOMLEFT" x="6" y="2"/>
+					<Anchor point="BOTTOMLEFT" x="6" y="4"/>
 				</Anchors>
 				<Scripts>
 					<OnClick>
@@ -277,7 +175,7 @@
 			<OnHide method="OnHide" />
 			<OnEvent method="OnEvent" />
 		</Scripts>
-		
+
 		<Animations>
 			<AnimationGroup parentKey="FadeIn" setToFinalAlpha="true">
 				<Alpha fromAlpha="0" toAlpha="0" duration=".3" order="1"/>

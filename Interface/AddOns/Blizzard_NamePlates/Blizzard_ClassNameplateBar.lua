@@ -21,7 +21,8 @@ function ClassNameplateBar:OnEvent(event, ...)
 			self:UpdateMaxPower();
 			return true;
 		end
-	elseif ( event == "PLAYER_ENTERING_WORLD" ) then
+	elseif ( event == "UNIT_DISPLAYPOWER" or event == "PLAYER_ENTERING_WORLD" ) then
+		self:Setup();
 		self:UpdatePower();
 		return true;
 	elseif (event == "PLAYER_TALENT_UPDATE" ) then
@@ -30,6 +31,14 @@ function ClassNameplateBar:OnEvent(event, ...)
 		return true;
 	end
 	return false;
+end
+
+function ClassNameplateBar:OnShow()
+	self:OnSizeChanged();
+end
+
+function ClassNameplateBar:OnSizeChanged()
+	-- override if needed
 end
 
 function ClassNameplateBar:MatchesClass()
@@ -41,7 +50,7 @@ function ClassNameplateBar:MatchesSpec()
 	if ( not self.spec ) then
 		return true;
 	end
-	local myspec = GetSpecialization();
+	local myspec = C_SpecializationInfo.GetSpecialization();
 	return myspec == self.spec;
 end
 
@@ -52,12 +61,14 @@ function ClassNameplateBar:Setup()
 		if ( self:MatchesSpec() ) then
 			self:RegisterUnitEvent("UNIT_POWER_FREQUENT", "player");
 			self:RegisterUnitEvent("UNIT_MAXPOWER", "player");
+			self:RegisterUnitEvent("UNIT_DISPLAYPOWER", "player");
 			self:RegisterEvent("PLAYER_ENTERING_WORLD");
 			showBar = true;
 		else
 			self:UnregisterEvent("UNIT_POWER_FREQUENT");
 			self:UnregisterEvent("UNIT_MAXPOWER");
 			self:UnregisterEvent("PLAYER_ENTERING_WORLD");
+			self:UnregisterEvent("UNIT_DISPLAYPOWER");
 		end
 
 		self:RegisterEvent("PLAYER_TALENT_UPDATE");
@@ -102,6 +113,9 @@ end
 function ClassNameplateBar:OnOptionsUpdated()
 end
 
+function ClassNameplateBar:GetUnit()
+	return "player";
+end
 
 --------------------------------------------------------------------------------
 --
@@ -112,13 +126,13 @@ end
 ClassNameplateManaBar = {};
 
 local NameplatePowerBarColor = {
-	["MANA"] = { r = 0.1, g = 0.25, b = 1.00 }
+	["MANA"] = { r = 0.1, g = 0.25, b = 1.00, predictionColor = POWERBAR_PREDICTION_COLOR_MANA }
 };
 
 function ClassNameplateManaBar:OnLoad()
 	ClassNameplateBar.OnLoad(self);
 
-	self.Border:SetVertexColor(0, 0, 0, .8);
+	self.Border:SetVertexColor(0, 0, 0, 1);
 end
 
 function ClassNameplateManaBar:OnEvent(event, ...)
@@ -130,6 +144,8 @@ function ClassNameplateManaBar:OnEvent(event, ...)
 	elseif ( event == "UNIT_SPELLCAST_START" or event == "UNIT_SPELLCAST_STOP" or event == "UNIT_SPELLCAST_FAILED" ) then
 		self:UpdatePredictedPowerCost(event == "UNIT_SPELLCAST_START");
 		self:SetupBar();
+	elseif ( event == "PLAYER_GAINS_VEHICLE_DATA" or event == "PLAYER_LOSES_VEHICLE_DATA" ) then
+		self:SetupBar();
 	else
 		ClassNameplateBar.OnEvent(self, event, ...);
 	end
@@ -139,10 +155,10 @@ function ClassNameplateBar:UpdatePredictedPowerCost(queryCurrentCastingInfo)
 	local cost = 0;
 
 	if queryCurrentCastingInfo then
-		local spellID = select(10, UnitCastingInfo("player"));
+		local spellID = select(9, UnitCastingInfo("player"));
 
 		if spellID then
-			local costTable = GetSpellPowerCost(spellID);
+			local costTable = C_Spell.GetSpellPowerCost(spellID) or {};
 			for _, costInfo in pairs(costTable) do
 				if costInfo.type == self.powerType then
 					cost = costInfo.cost;
@@ -162,29 +178,38 @@ function ClassNameplateManaBar:Setup()
 	self:RegisterUnitEvent("UNIT_SPELLCAST_START", "player");
 	self:RegisterUnitEvent("UNIT_SPELLCAST_STOP", "player");
 	self:RegisterUnitEvent("UNIT_SPELLCAST_FAILED", "player");
+	self:RegisterUnitEvent("PLAYER_GAINS_VEHICLE_DATA", "player");
+	self:RegisterUnitEvent("PLAYER_LOSES_VEHICLE_DATA", "player");
 	self:RegisterEvent("PLAYER_ENTERING_WORLD");
 
-	local tex = self:GetStatusBarTexture();
-	local bar = self.ManaCostPredictionBar;
+	local statusBarTexture = self:GetStatusBarTexture();
 
-	bar:ClearAllPoints();
-	bar:SetPoint("TOPLEFT", tex, "TOPRIGHT", 0, 0);
-	bar:SetPoint("BOTTOMLEFT", tex, "BOTTOMRIGHT", 0, 0);
+	self.ManaCostPredictionBar:ClearAllPoints();
+	self.ManaCostPredictionBar:SetPoint("TOPLEFT", statusBarTexture, "TOPRIGHT", 0, 0);
+	self.ManaCostPredictionBar:SetPoint("BOTTOMLEFT", statusBarTexture, "BOTTOMRIGHT", 0, 0);
 
 	self:Show();
 	NamePlateDriverFrame:SetClassNameplateManaBar(self);
 end
 
 function ClassNameplateManaBar:SetupBar()
-	local powerType, powerToken = UnitPowerType("player");
+	local powerType, powerToken, altR, altG, altB = UnitPowerType("player");
+	local info;
 	if (powerToken) then
-		local info = NameplatePowerBarColor[powerToken];
-		if (not info) then
-			info = PowerBarColor[powerToken];
+		info = NameplatePowerBarColor[powerToken] or PowerBarColor[powerToken];
+		if not info then
+			if altR then
+				info = CreateColor(altR, altG, altB);
+			else
+				info = PowerBarColor[powerType];
+			end
 		end
 		self:SetStatusBarColor(info.r, info.g, info.b);
 
-		self.FeedbackFrame:Initialize(info, "player", powerType);
+		-- Nameplate mana bar uses only solid color (no atlases), ensure its feedback frame does the same
+		local colorOnlyInfo = { r = info.r, g = info.g, b = info.b };
+		self.FeedbackFrame:Initialize(colorOnlyInfo, "player", powerType);
+
 		self:SetScript("OnUpdate", ClassNameplateManaBar_OnUpdate);
 
 		self.FullPowerFrame:SetSize(86, 6);
@@ -201,6 +226,18 @@ function ClassNameplateManaBar:SetupBar()
 		self.powerType = powerType;
 		self.FullPowerFrame:RemoveAnims();
 		self:UpdatePredictedPowerCost(true);
+
+		if (self.ManaCostPredictionBar) then
+			local predictionColor;
+			if (info and info.predictionColor) then
+				predictionColor = info.predictionColor;
+			else
+				-- No prediction color set, default to mana prediction color
+				predictionColor = POWERBAR_PREDICTION_COLOR_MANA;
+			end
+	
+			self.ManaCostPredictionBar:SetVertexColor(predictionColor:GetRGBA());
+		end
 	end
 
 	self.currValue = UnitPower("player", powerType) - self.predictedPowerCost;
@@ -235,21 +272,30 @@ function ClassNameplateManaBar:UpdatePower()
 end
 
 function ClassNameplateManaBar:OnOptionsUpdated()
-	local width, height = C_NamePlate.GetNamePlateSelfSize();
-	self:SetWidth(width - 24);
-	self:SetHeight(DefaultCompactNamePlatePlayerFrameSetUpOptions.healthBarHeight);
+	self:OnSizeChanged();
+end
+
+function ClassNameplateManaBar:OnSizeChanged() -- override
+	PixelUtil.SetHeight(self, NamePlateSetupOptions.healthBarHeight);
+	self.Border:UpdateSizes();
+end
+
+function ClassNameplateManaBar:GetUnit()
+	return "player";
 end
 
 function ClassNameplateManaBar_OnUpdate(self)
 	local currValue = UnitPower("player", self.powerType) - self.predictedPowerCost;
+	local oldValue = self.currValue or 0;
+
 	if ( currValue ~= self.currValue or self.forceUpdate ) then
 		self.forceUpdate = nil;
 		-- Only show anim if change is more than 10%
-		if ( self.FeedbackFrame.maxValue ~= 0 and math.abs(currValue - self.currValue) / self.FeedbackFrame.maxValue > 0.1 ) then
-			self.FeedbackFrame:StartFeedbackAnim(self.currValue or 0, currValue);
+		if ( self.FeedbackFrame.maxValue ~= 0 and ( math.abs(currValue - oldValue) / self.FeedbackFrame.maxValue ) > 0.1 ) then
+			self.FeedbackFrame:StartFeedbackAnim(oldValue, currValue);
 		end
 		if ( self.FullPowerFrame.active ) then
-			self.FullPowerFrame:StartAnimIfFull(self.currValue or 0, currValue);
+			self.FullPowerFrame:StartAnimIfFull(currValue);
 		end
 		self.currValue = currValue;
 	end

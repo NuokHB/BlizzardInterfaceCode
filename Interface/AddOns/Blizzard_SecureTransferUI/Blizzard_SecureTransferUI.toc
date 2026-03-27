@@ -1,4 +1,5 @@
-## Interface: 70000
-## Title: Blizzard Secure Trade UI
-## Secure: 1
+## Title: Blizzard_SecureTransferUI
+## AllowLoad: Both
+## RequiredDep: Blizzard_SharedXML
+## UseSecureEnvironment: 1
 Blizzard_SecureTransferUI.xml

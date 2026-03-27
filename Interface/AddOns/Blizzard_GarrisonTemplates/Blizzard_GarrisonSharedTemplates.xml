@@ -1,5 +1,5 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/
-..\FrameXML\UI.xsd">
+..\..\..\..\..\WoW\Data\Interface\AddOns\Blizzard_SharedXML\UI.xsd">
 	<Script file="Blizzard_GarrisonSharedTemplates.lua"/>
 
 	<Frame name="GarrisonUITemplate" inherits="BaseBasicFrameTemplate" virtual="true">
@@ -7,8 +7,8 @@
 			<Layer level="BACKGROUND" textureSubLevel="-1">
 				<Texture parentKey="BackgroundTile" atlas="Garr_WoodFrame-BackgroundTile" horizTile="true" vertTile="true">
 					<Anchors>
-						<Anchor point="TOPLEFT"/>
-						<Anchor point="BOTTOMRIGHT"/>
+						<Anchor point="TOPLEFT" x="0" y="-5"/>
+						<Anchor point="BOTTOMRIGHT" x="0" y="3"/>
 					</Anchors>
 				</Texture>
 			</Layer>
@@ -195,29 +195,19 @@
 	</Frame>
 
 	<Frame name="GarrisonListTemplate" inherits="GarrisonMissionBaseFrameTemplate" virtual="true">
-		<Size x="300" y="575"/>
 		<Frames>
-			<ScrollFrame name="$parentListScrollFrame" parentKey="listScroll" inherits="HybridScrollFrameTemplate">
+			<Frame parentKey="ScrollBox" inherits="WowScrollBoxList">
 				<Anchors>
 					<Anchor point="TOPLEFT" x="5" y="-6"/>
-					<Anchor point="BOTTOMRIGHT" x="-3" y="8"/>
+					<Anchor point="BOTTOMRIGHT" x="-23" y="8"/>
 				</Anchors>
-				<Frames>
-					<Slider name="$parentScrollBar" inherits="HybridScrollBarTrimTemplate" parentKey="scrollBar">
-						<Anchors>
-							<Anchor point="TOPLEFT" relativePoint="TOPRIGHT" x="-20" y="-12"/>
-							<Anchor point="BOTTOMLEFT" relativePoint="BOTTOMRIGHT" x="-20" y="12"/>
-						</Anchors>
-						<Scripts>
-							<OnLoad>
-								self.trackBG:Show();
-								self.trackBG:SetVertexColor(0, 0, 0, 0.75);
-								self.doNotHide = true;
-							</OnLoad>
-						</Scripts>
-					</Slider>
-				</Frames>
-			</ScrollFrame>
+			</Frame>
+			<EventFrame parentKey="ScrollBar" inherits="MinimalScrollBar">
+				<Anchors>
+					<Anchor point="TOPLEFT" relativeKey="$parent.ScrollBox" relativePoint="TOPRIGHT" x="0" y="-5"/>
+					<Anchor point="BOTTOMLEFT" relativeKey="$parent.ScrollBox" relativePoint="BOTTOMRIGHT" x="0" y="5"/>
+				</Anchors>
+			</EventFrame>
 		</Frames>
 	</Frame>
 
@@ -281,7 +271,7 @@
 					<Size x="140" y="0"/>
 					<Anchors>
 						<!-- This is re-anchored to PortraitFrame in the Lua code -->
-						<Anchor point="LEFT" relativeKey="$parent.PortraitFrame" relativePoint="LEFT" x="66" y="0"/>
+						<Anchor point="LEFT" relativeKey="$parent" relativePoint="LEFT" x="66" y="0"/>
 					</Anchors>
 				</FontString>
 				<FontString parentKey="ILevel" inherits="GameFontHighlightSmall" justifyH="LEFT">
@@ -333,9 +323,7 @@
 	</Button>
 
 	<Button name="GarrisonFollowerCombatAllySpellTemplate" virtual="true" mixin="GarrisonFollowerCombatAllySpellMixin">
-		<Size>
-			<AbsDimension x="37" y="37"/>
-		</Size>
+		<Size x="37" y="37"/>
 		<Layers>
 			<Layer level="ARTWORK">
 				<Texture parentKey="iconTexture" setAllPoints="true"/>
@@ -384,6 +372,83 @@
 	</Texture>
 	<Frame name="GarrisonMissionFollowerDurabilityFrameTemplate" mixin="GarrisonMissionFollowerDurabilityMixin" virtual="true">
 		<Size x="100" y="11"/>
+	</Frame>
+
+	<Frame name="GarrisonAbilityCounterTemplate" virtual="true">
+		<Size x="20" y="20"/>
+		<Layers>
+			<Layer level="ARTWORK" textureSubLevel="-1">
+				<Texture parentKey="Icon">
+					<Size x="20" y="20"/>
+					<Anchors>
+						<Anchor point="CENTER"/>
+					</Anchors>
+				</Texture>
+			</Layer>
+			<Layer level="ARTWORK">
+				<Texture parentKey="Border" atlas="GarrMission_EncounterAbilityBorder" useAtlasSize="true">
+					<Anchors>
+						<Anchor point="CENTER"/>
+					</Anchors>
+				</Texture>
+			</Layer>
+		</Layers>
+	</Frame>
+
+	<Frame name="GarrisonMissionAbilityCounterTemplate" inherits="GarrisonAbilityCounterTemplate" virtual="true">
+		<Layers>
+			<Layer level="ARTWORK">
+				<Texture parentKey="AbilityFeedbackGlow" hidden="false" alpha="0.01" alphaMode="ADD" atlas="GarrMission-AbilityHighlight">
+					<Size x="30" y="30"/>
+					<Anchors>
+						<Anchor point="CENTER"/>
+					</Anchors>
+				</Texture>
+			</Layer>
+		</Layers>
+		<Animations>
+			<AnimationGroup parentKey="AbilityFeedbackGlowAnim" setToFinalAlpha="true">
+				<Alpha childKey="AbilityFeedbackGlow" smoothing="IN" duration="0.25" order="1" fromAlpha="0" toAlpha="1"/>
+				<Scale childKey="AbilityFeedbackGlow" duration="0.25" order="1" fromScaleX="0.8" fromScaleY="0.8" toScaleX="1.4" toScaleY="1.4"/>
+				<Alpha childKey="AbilityFeedbackGlow" startDelay="0.2" duration="0.5" order="1" fromAlpha="1" toAlpha="0"/>
+			</AnimationGroup>
+		</Animations>
+
+		<Scripts>
+			<OnEnter function="GarrisonMissionMechanicFollowerCounter_OnEnter"/>
+			<OnLeave function="GarrisonMissionMechanicFollowerCounter_OnLeave"/>
+		</Scripts>
+	</Frame>
+
+	<Frame name="GarrisonFollowerListButtonAbilityTemplate" virtual="true">
+		<Size x="234" y="20"/>
+		<KeyValues>
+			<KeyValue key="followerTypeID" value="1" type="number"/>
+		</KeyValues>
+		<Layers>
+			<Layer level="ARTWORK">
+				<Texture parentKey="Icon">
+					<Size x="20" y="20"/>
+					<Anchors>
+						<Anchor point="LEFT" x="2"/>
+					</Anchors>
+				</Texture>
+				<FontString parentKey="Name" inherits="GameFontHighlight" justifyH="LEFT">
+					<Anchors>
+						<Anchor point="TOPLEFT" relativeKey="$parent.Icon" relativePoint="TOPRIGHT" x="2"/>
+						<Anchor point="BOTTOMRIGHT" x="-10"/>
+					</Anchors>
+				</FontString>
+			</Layer>
+		</Layers>
+		<Scripts>
+			<OnEnter>
+				ShowGarrisonFollowerAbilityTooltip(self, self.abilityID, self.followerTypeID);
+			</OnEnter>
+			<OnLeave>
+				HideGarrisonFollowerAbilityTooltip(self.followerTypeID);
+			</OnLeave>
+		</Scripts>
 	</Frame>
 
 	<Button name="GarrisonMissionFollowerButtonTemplate" inherits="GarrisonFollowerButtonTemplate" virtual="true">
@@ -457,13 +522,7 @@
 				self:RegisterForDrag("LeftButton");
 				self.PortraitFrame:SetFrameLevel(self.BusyFrame:GetFrameLevel() + 1);
 			</OnLoad>
-			<OnClick>
-				if ( IsModifiedClick() ) then
-					GarrisonFollowerListButton_OnModifiedClick(self, button);
-				else
-					GarrisonFollowerListButton_OnClick(self, button);
-				end
-			</OnClick>
+			<OnClick function="GarrisonFollowerListButton_OnUserClick"/>
 			<OnDragStart function="GarrisonFollowerListButton_OnDragStart"/>
 			<OnDragStop function="GarrisonFollowerListButton_OnDragStop"/>
 		</Scripts>
@@ -491,7 +550,7 @@
 		</KeyValues>
 		<Layers>
 			<Layer level="BACKGROUND">
-				<Texture atlas="Garr_Mission_MaterialFrame" useAtlasSize="true" setAllPoints="true"/>
+				<Texture parentKey="BG" atlas="Garr_Mission_MaterialFrame" useAtlasSize="true" setAllPoints="true"/>
 			</Layer>
 			<Layer level="ARTWORK">
 				<FontString inherits="GameFontNormal" justifyH="LEFT" text="GARRISON_YOUR_MATERIAL">
@@ -516,7 +575,7 @@
 		<Scripts>
 			<OnEnter>
 				GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
-				GameTooltip:SetCurrencyTokenByID(self.currencyType);
+				GameTooltip:SetCurrencyByID(self.currencyType);
 				GameTooltip:Show();
 			</OnEnter>
 			<OnLeave function="GameTooltip_Hide"/>
@@ -529,14 +588,14 @@
 			<Layer level="ARTWORK">
 				<FontString parentKey="Text" inherits="GameFontNormal" text="GARRISON_FOLLOWER_CLICK_UPGRADE_PROMPT">
 					<Anchors>
-						<Anchor point="TOP"/>
+						<Anchor point="BOTTOM"/>
 					</Anchors>
 					<Color r="0.1" g="1" b="0.1"/>
 				</FontString>
-				<FontString parentKey="TextInvalid" inherits="GameFontNormal" textwrap="true" text="GARRISON_FOLLOWER_UPGRADE_REQUIRES_MAX_LEVEL">
-					<Size x="200" y="40"/>
+				<FontString parentKey="TextInvalid" inherits="GameFontNormal" text="GARRISON_FOLLOWER_UPGRADE_REQUIRES_MAX_LEVEL">
+					<Size x="200" y="0"/>
 					<Anchors>
-						<Anchor point="TOP"/>
+						<Anchor point="BOTTOM"/>
 					</Anchors>
 					<Color r="1" g="0.1" b="0.1"/>
 				</FontString>
@@ -558,27 +617,6 @@
 			<OnEnter function="GarrisonTruncationFrame_OnEnter"/>
 			<OnLeave function="GarrisonTruncationFrame_OnLeave"/>
 		</Scripts>
-	</Frame>
-
-	<Frame name="GarrisonAbilityCounterTemplate" virtual="true">
-		<Size x="20" y="20"/>
-		<Layers>
-			<Layer level="ARTWORK" textureSubLevel="-1">
-				<Texture parentKey="Icon">
-					<Size x="20" y="20"/>
-					<Anchors>
-						<Anchor point="CENTER"/>
-					</Anchors>
-				</Texture>
-			</Layer>
-			<Layer level="ARTWORK">
-				<Texture parentKey="Border" atlas="GarrMission_EncounterAbilityBorder" useAtlasSize="true">
-					<Anchors>
-						<Anchor point="CENTER"/>
-					</Anchors>
-				</Texture>
-			</Layer>
-		</Layers>
 	</Frame>
 
 	<Frame name="GarrisonAbilityCounterWithCheckTemplate" inherits="GarrisonAbilityCounterTemplate" virtual="true">
@@ -630,7 +668,7 @@
 				self.Border:SetPoint("CENTER", 0, 0);
 			</OnMouseUp>
 			<OnClick>
-				PlaySound("igMainMenuOptionCheckBoxOn");
+				PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON);
 				local frame = self:GetParent();
 				local searchBox = frame:GetParent():GetParent()[frame.listName].SearchBox;
 				local searchString = searchBox:GetText();
@@ -733,7 +771,7 @@
 		<Frames>
 			<Frame parentKey="Counter" inherits="GarrisonMissionLargeMechanicTemplate" hidden="true">
 				<Anchors>
-					<Anchor point="TOP" relativeKey="$parent.Border" relativePoint="BOTTOM" x="0" y="-5"/>
+					<Anchor point="TOP" relativeKey="$parent" relativePoint="BOTTOM" x="0" y="-5"/>
 				</Anchors>
 			</Frame>
 		</Frames>

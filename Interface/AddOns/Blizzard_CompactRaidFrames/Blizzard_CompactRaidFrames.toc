@@ -1,8 +1,8 @@
-## Interface: 70000
-## Title: Blizzard Compact Raid Frames
-## Secure: 1
-## LoadOnDemand: 0
+## Title: Blizzard_CompactRaidFrames
+## Dependencies: Blizzard_RaidFrame
 Blizzard_CompactRaidFrameReservationManager.lua
+Blizzard_CompactRaidFrameContainer.lua
 Blizzard_CompactRaidFrameContainer.xml
-Blizzard_CompactRaidFrameManager.xml
+[Family]\Blizzard_CompactRaidFrameManager.lua
+[Family]\Blizzard_CompactRaidFrameManager.xml
 Localization.lua

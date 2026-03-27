@@ -1,53 +1,57 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/
-..\FrameXML\UI.xsd">
+..\..\..\..\..\WoW\Data\Interface\AddOns\Blizzard_SharedXML\UI.xsd">
 	<Script file="Blizzard_GarrisonMissionTemplates.lua"/>
 
 	<Button name="GarrisonMissionFrameTabTemplate" virtual="true">
 		<Size x="115" y="42"/>
 		<Layers>
 			<Layer level="BACKGROUND">
-				<Texture parentKey="LeftDisabled" file="Interface\AchievementFrame\UI-Achievement-Header">
+				<Texture parentKey="LeftActive" file="Interface\AchievementFrame\UI-Achievement-Header">
 					<Size x="21" y="59"/>
 					<Anchors>
-						<Anchor point="TOPLEFT" x="0" y="3"/>
+						<Anchor point="TOPLEFT" x="-10" y="3"/>
 					</Anchors>
 					<TexCoords left="0.47265625" right="0.513671875" top="0.76953125" bottom="1.0"/>
 				</Texture>
-				<Texture parentKey="MiddleDisabled" file="Interface\AchievementFrame\UI-Achievement-Header">
-					<Size x="88" y="59"/>
-					<Anchors>
-						<Anchor point="LEFT" relativeKey="$parent.LeftDisabled" relativePoint="RIGHT"/>
-					</Anchors>
-					<TexCoords left="0.513671875" right="0.685546875" top="0.76953125" bottom="1.0"/>
-				</Texture>
-				<Texture parentKey="RightDisabled" file="Interface\AchievementFrame\UI-Achievement-Header">
+				<Texture parentKey="RightActive" file="Interface\AchievementFrame\UI-Achievement-Header">
 					<Size x="18" y="59"/>
 					<Anchors>
-						<Anchor point="LEFT" relativeKey="$parent.MiddleDisabled" relativePoint="RIGHT"/>
+						<Anchor point="TOPRIGHT" x="5" y="3"/>
 					</Anchors>
 					<TexCoords left="0.685546875" right="0.720703125" top="0.76953125" bottom="1.0"/>
+				</Texture>
+				<Texture parentKey="MiddleActive" file="Interface\AchievementFrame\UI-Achievement-Header">
+					<Size x="88" y="59"/>
+					<Anchors>
+						<Anchor point="LEFT" relativeKey="$parent.LeftActive" relativePoint="RIGHT"/>
+						<Anchor point="RIGHT" relativeKey="$parent.RightActive" relativePoint="LEFT"/>
+					</Anchors>
+					<TexCoords left="0.513671875" right="0.685546875" top="0.76953125" bottom="1.0"/>
 				</Texture>
 				<Texture parentKey="Left" file="Interface\AchievementFrame\UI-Achievement-Header">
 					<Size x="21" y="49"/>
 					<Anchors>
-						<Anchor point="TOPLEFT"/>
+						<Anchor point="TOPLEFT" x="-10"/>
 					</Anchors>
 					<TexCoords left="0.47265625" right="0.513671875" top="0.76953125" bottom="1.0"/>
+				</Texture>
+				<Texture parentKey="Right" file="Interface\AchievementFrame\UI-Achievement-Header">
+					<Size x="18" y="49"/>
+					<Anchors>
+						<Anchor point="RIGHT" x="5" y="-3.5"/>
+					</Anchors>
+					<TexCoords left="0.685546875" right="0.720703125" top="0.76953125" bottom="1.0"/>
 				</Texture>
 				<Texture parentKey="Middle" file="Interface\AchievementFrame\UI-Achievement-Header">
 					<Size x="88" y="49"/>
 					<Anchors>
 						<Anchor point="LEFT" relativeKey="$parent.Left" relativePoint="RIGHT"/>
+						<Anchor point="RIGHT" relativeKey="$parent.Right" relativePoint="LEFT"/>
 					</Anchors>
 					<TexCoords left="0.513671875" right="0.685546875" top="0.76953125" bottom="1.0"/>
 				</Texture>
-				<Texture parentKey="Right" file="Interface\AchievementFrame\UI-Achievement-Header">
-					<Size x="18" y="49"/>
-					<Anchors>
-						<Anchor point="LEFT" relativeKey="$parent.Middle" relativePoint="RIGHT"/>
-					</Anchors>
-					<TexCoords left="0.685546875" right="0.720703125" top="0.76953125" bottom="1.0"/>
-				</Texture>
+			</Layer>
+			<Layer level="HIGHLIGHT">
 				<Texture parentKey="LeftHighlight" file="Interface\AchievementFrame\UI-Achievement-Header" hidden="true" alphaMode="ADD">
 					<Size x="32" y="49"/>
 					<Anchors>
@@ -80,8 +84,6 @@
 				self.deselectedTextY = 2;
 				self.selectedTextY = 2;
 			</OnLoad>
-			<OnEnter function="GarrisonMissionFrameTab_OnEnter"/>
-			<OnLeave function="GarrisonMissionFrameTab_OnLeave"/>
 			<OnShow>
 				PanelTemplates_TabResize(self, 10);
 			</OnShow>
@@ -127,7 +129,7 @@
 				</Texture>
 			</Layer>
 			<Layer level="ARTWORK">
-				<FontString parentKey="Name" justifyH="LEFT" inherits="GameFontHighlight">
+				<FontString parentKey="Name" justifyH="LEFT" inherits="GameFontHighlight" maxLines="3">
 					<Size x="95" y="0"/>
 					<Anchors>
 						<Anchor point="LEFT" relativeKey="$parent.BG" x="10"/>
@@ -157,11 +159,20 @@
 					</Anchors>
 				</Texture>
 			</Layer>
+			<Layer level="OVERLAY" textureSubLevel="1">
+				<Texture parentKey="IconOverlay" hidden="true">
+					<Size x="42" y="42"/>
+					<Anchors>
+						<Anchor point="CENTER" relativeKey="$parent.Icon"/>
+					</Anchors>
+				</Texture>
+			</Layer>
 		</Layers>
 		<Animations>
 			<AnimationGroup parentKey="Anim" setToFinalAlpha="true">
 				<Alpha childKey="Icon" duration="0.1" order="1" fromAlpha="0" toAlpha="1"/>
 				<Alpha childKey="IconBorder" duration="0.15" order="1" fromAlpha="0" toAlpha="1"/>
+				<Alpha childKey="IconOverlay" duration="0.15" order="1" fromAlpha="0" toAlpha="1"/>
 				<Alpha childKey="ItemBurst" duration="0.15" order="1" fromAlpha="0" toAlpha="1"/>
 				<Scale childKey="ItemBurst" duration="0.2" order="1" fromScaleX="0.5" fromScaleY="0.5" toScaleX="0.9" toScaleY="0.9"/>
 				<Alpha childKey="ItemBurst" startDelay="0.2" duration="0.5" order="1" fromAlpha="1" toAlpha="0"/>
@@ -192,6 +203,9 @@
 			</Layer>
 			<Layer level="BORDER">
 				<Texture parentKey="IconBorder" file="Interface\Common\WhiteIconFrame" setAllPoints="true"/>
+			</Layer>
+			<Layer level="OVERLAY" textureSubLevel="1">
+				<Texture parentKey="IconOverlay" hidden="true" setAllPoints="true"/>
 			</Layer>
 			<Layer level="ARTWORK">
 				<FontString parentKey="Name" justifyH="LEFT" inherits="GameFontHighlight" hidden="true">
@@ -282,12 +296,7 @@
 					<Anchor point="BOTTOMRIGHT" relativeKey="$parent.MissionXP"/>
 				</Anchors>
 				<Scripts>
-					<OnEnter>
-						if (self:GetParent().MissionXP.hasBonusBaseXP) then
-							GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
-							GameTooltip:SetText(GARRISON_MISSION_BONUS_BASE_XP_TOOLTIP, nil, nil, nil, nil, true);
-						end
-					</OnEnter>
+					<OnEnter function="GarrisonMissionPageRewardTemplate_MissionXPTooltipHitBox_OnEnter"/>
 					<OnLeave function="GameTooltip_Hide"/>
 				</Scripts>
 			</Frame>
@@ -297,17 +306,7 @@
 					<Anchor point="BOTTOMRIGHT" relativeKey="$parent.ChanceLabel"/>
 				</Anchors>
 				<Scripts>
-					<OnEnter>
-						GameTooltip:ClearAllPoints();
-						GameTooltip:SetPoint("BOTTOMLEFT", self, "BOTTOMRIGHT", 10, 0);
-						GameTooltip:SetOwner(self, "ANCHOR_PRESERVE");
-						GameTooltip:SetText(GARRISON_MISSION_CHANCE_TOOLTIP_HEADER);
-						local missionID = self:GetParent():GetParent().missionInfo.missionID;
-						GameTooltip:AddLine(string.format(GARRISON_MISSION_PERCENT_CHANCE, C_Garrison.GetMissionSuccessChance(missionID)), HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b);
-						GameTooltip:AddLine(" ");
-						GameTooltip:AddLine(self:GetParent().tooltipText, NORMAL_FONT_COLOR.r, NORMAL_FONT_COLOR.g, NORMAL_FONT_COLOR.b, 1, 1);
-						GameTooltip:Show();
-					</OnEnter>
+					<OnEnter function="GarrisonMissionPageRewardTemplate_TooltipHitBox_OnEnter"/>
 					<OnLeave function="GameTooltip_Hide"/>
 				</Scripts>
 			</Frame>
@@ -317,9 +316,7 @@
 				<Alpha childKey="Glow" duration="0.25" order="1" fromAlpha="0" toAlpha="1"/>
 				<Alpha childKey="Glow" startDelay="0.5" duration="0.5" order="1" fromAlpha="1" toAlpha="0"/>
 				<Scale childKey="Glow" duration="0.25" order="1" fromScaleX="1" fromScaleY="1" toScaleX="1.5" toScaleY="1.75">
-					<Origin point="BOTTOM">
-						<Offset x="0" y="0"/>
-					</Origin>
+					<Origin point="BOTTOM"/>
 				</Scale>
 				<Translation childKey="Glow" duration="0.5" order="1" offsetX="0" offsetY="25"/>
 			</AnimationGroup>
@@ -419,7 +416,7 @@
 				self.Border:SetPoint("CENTER", 0, 0);
 			</OnMouseUp>
 			<OnClick>
-				PlaySound("igMainMenuOptionCheckBoxOn");
+				PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON);
 				self.mainFrame.FollowerList.SearchBox:SetText(self.info.name);
 			</OnClick>
 		</Scripts>
@@ -502,7 +499,7 @@
 		</Layers>
 		<Animations>
 			<AnimationGroup parentKey="FlashAnim" looping="BOUNCE">
-				<Alpha childKey="Flash" change="-0.75" duration="1.0" smoothing="IN_OUT" order="1" fromAlpha="0.75" toAlpha="0"/>
+				<Alpha childKey="Flash" duration="1.0" smoothing="IN_OUT" order="1" fromAlpha="0.75" toAlpha="0"/>
 			</AnimationGroup>
 		</Animations>
 		<Scripts>
@@ -516,7 +513,7 @@
 		<Size x="140" y="38"/>
 		<Layers>
 			<Layer level="ARTWORK">
-				<FontString parentKey="CostLabel" inherits="GameFontNormalLarge2" justifyH="LEFT" text="COSTS_LABEL">
+				<FontString parentKey="CostLabel" inherits="GameFontNormalLarge" justifyH="LEFT" text="COSTS_LABEL">
 					<Anchors>
 						<Anchor point="LEFT" y="1"/>
 					</Anchors>
@@ -534,6 +531,13 @@
 				</FontString>
 			</Layer>
 		</Layers>
+	</Frame>
+
+	<Frame name="GarrisonMissionPageCostWithTooltipTemplate" inherits="GarrisonMissionPageCostFrameTemplate" mixin="GarrisonMissionPageCostWithTooltipMixin" virtual="true">
+		<Scripts>
+			<OnEnter method="OnEnter"/>
+			<OnLeave method="OnLeave"/>
+		</Scripts>
 	</Frame>
 
 	<Frame name="GarrisonMissionPageStageTemplate" inherits="GarrisonMissionStageTemplate" virtual="true">
@@ -636,9 +640,40 @@
 				</Anchors>
 				<Layers>
 					<Layer level="BACKGROUND">
+						<Texture parentKey="Highlight" hidden="true" alpha="0" alphaMode="ADD" atlas="groupfinder-eye-highlight" useAtlasSize="true">
+							<Anchors>
+								<Anchor point="CENTER" x="0" y="1"/>
+							</Anchors>
+						</Texture>
 						<Texture parentKey="Texture" setAllPoints="true"/>
 					</Layer>
+					<Layer level="OVERLAY" textureSubLevel="1">
+						<Texture parentKey="CrossLeft" hidden="true" alpha="1" atlas="GarrMission_EncounterBar-Xleft">
+							<Size x="48" y="48"/>
+							<Anchors>
+								<Anchor point="CENTER"/>
+							</Anchors>
+						</Texture>
+						<Texture parentKey="CrossRight" hidden="true" alpha="1" atlas="GarrMission_EncounterBar-Xright">
+							<Size x="48" y="48"/>
+							<Anchors>
+								<Anchor point="CENTER"/>
+							</Anchors>
+						</Texture>
+					</Layer>
 				</Layers>
+				<Animations>
+					<AnimationGroup parentKey="Countered" setToFinalAlpha="true">
+						<Scale childKey="CrossLeft" duration="0.15" order="1" fromScaleX="5" fromScaleY="5" toScaleX="1" toScaleY="1"/>
+						<Alpha childKey="CrossLeft" duration="0.1" order="1" fromAlpha="0" toAlpha="1"/>
+						<Scale childKey="CrossRight" startDelay="0.1" duration="0.15" order="1" fromScaleX="5" fromScaleY="5" toScaleX="1" toScaleY="1"/>
+						<Alpha childKey="CrossRight" startDelay="0.1" duration="0.1" order="1" fromAlpha="0" toAlpha="1"/>
+					</AnimationGroup>
+					<AnimationGroup parentKey="EnvironmentHighlight" setToFinalAlpha="true" looping="REPEAT">
+						<Scale childKey="Highlight" startDelay="0.1" endDelay="2.9" smoothing="NONE" duration="1.0" order="1" fromScaleX="0.39" fromScaleY="0.39" toScaleX=".6" toScaleY=".6"/>
+						<Alpha childKey="Highlight" startDelay="0.1" endDelay="2.9" smoothing="NONE" duration="1.0" order="1" fromAlpha=".6" toAlpha="0"/>
+					</AnimationGroup>
+				</Animations>
 				<Scripts>
 					<OnEnter function="GarrisonMissionPageEnvironment_OnEnter"/>
 					<OnLeave function="GameTooltip_Hide"/>
@@ -651,12 +686,10 @@
 	</Frame>
 
 	<Button name="GarrisonMissionPageCloseButtonTemplate" inherits="UIPanelCloseButtonNoScripts" virtual="true">
-		<Size>
-			<AbsDimension x="40" y="40"/>
-		</Size>
+		<Size x="40" y="40"/>
 		<Scripts>
 			<OnClick>
-				PlaySound("UI_Garrison_CommandTable_MissionClose");
+				PlaySound(SOUNDKIT.UI_GARRISON_COMMAND_TABLE_MISSION_CLOSE);
 				GarrisonMissionController_CloseMission(self);
 			</OnClick>
 		</Scripts>
@@ -716,13 +749,13 @@
 			</Frame>
 			<Button inherits="StartMissionButtonTemplate">
 				<Anchors>
-					<Anchor point="RIGHT" relativeKey="$parent.ButtonFrame" x="-50" y="1"/>
+					<Anchor point="RIGHT" relativeKey="$parent" x="-50" y="1"/>
 				</Anchors>
 			</Button>
-			<Frame parentKey="CostFrame" inherits="GarrisonMissionPageCostFrameTemplate">
+			<Frame parentKey="CostFrame" inherits="GarrisonMissionPageCostWithTooltipTemplate">
 				<Anchors>
-					<Anchor point="LEFT" relativeKey="$parent.ButtonFrame" x="50"/>
-					<Anchor point="RIGHT" relativeKey="$parent.ButtonFrame" relativePoint="CENTER" />
+					<Anchor point="LEFT" relativeKey="$parent" x="50"/>
+					<Anchor point="RIGHT" relativeKey="$parent" relativePoint="CENTER" />
 				</Anchors>
 			</Frame>
 		</Frames>
@@ -819,20 +852,20 @@
 					</Layer>
 				</Layers>
 			</CinematicModel>
-			<Frame parentKey="LoadingFrame" inherits="LoadingSpinnerTemplate" hidden="true">
+			<Frame parentKey="LoadingFrame" inherits="SpinnerTemplate" hidden="true">
+				<Size x="30" y="30"/>
 				<Layers>
 					<Layer level="ARTWORK">
 						<FontString parentKey="Label" inherits="GameFontHighlight" text="LFG_LIST_LOADING">
 							<Anchors>
-								<Anchor point="LEFT" relativePoint="RIGHT"/>
+								<Anchor point="LEFT" relativePoint="RIGHT" x="9" y="0"/>
 							</Anchors>
 						</FontString>
 					</Layer>
 				</Layers>
 				<Scripts>
 					<OnLoad>
-						self.Anim:Play();
-						self:SetPoint("TOP", self:GetParent().ViewButton, "BOTTOM", -self.Label:GetWidth()/2, 0);
+						self:SetPoint("TOP", self:GetParent().ViewButton, "BOTTOM", -self.Label:GetWidth()/2, -10);
 					</OnLoad>
 				</Scripts>
 			</Frame>
@@ -840,11 +873,10 @@
 		<Scripts>
 			<OnKeyDown>
 				if ( key == "SPACE" ) then
-					self:SetPropagateKeyboardInput(false);
 					self.ViewButton:Click();
-				else
-					self:SetPropagateKeyboardInput(true);
+					return false;
 				end
+				return true;
 			</OnKeyDown>
 		</Scripts>
 	</Frame>
@@ -866,8 +898,10 @@
 		<Size x="305" y="370"/>
 		<Scripts>
 			<OnModelLoaded>
+				self:ResetModel();
+				self:ZeroCachedCenterXY();
 				self:SetAlpha(1);
-				self:SetFacing(self.facing or -0.2);
+				self:ApplyRotation(self.facing or -0.2);
 			</OnModelLoaded>
 			<OnShow>
 				self:SetTargetDistance(0);
@@ -899,12 +933,7 @@
 					<Anchor point="TOPLEFT" x="0" y="0"/>
 				</Anchors>
 				<Frames>
-					<CinematicModel parentArray="Model" parentKey="Model1" inherits="GarrisonFollowerTabModelClusterModel" frameLevel="15">
-						<Scripts>
-							<OnMouseDown function="Model_OnMouseDown"/>
-							<OnMouseUp function="Model_OnMouseUp"/>
-						</Scripts>
-					</CinematicModel>
+					<CinematicModel parentArray="Model" parentKey="Model1" inherits="GarrisonFollowerTabModelClusterModel" frameLevel="15"/>
 					<CinematicModel parentArray="Model" parentKey="Model2" inherits="GarrisonFollowerTabModelClusterModel" frameLevel="14"/>
 					<CinematicModel parentArray="Model" parentKey="Model3" inherits="GarrisonFollowerTabModelClusterModel" frameLevel="13"/>
 					<CinematicModel parentArray="Model" parentKey="Model4" inherits="GarrisonFollowerTabModelClusterModel" frameLevel="12"/>
@@ -912,27 +941,27 @@
 					<Frame frameLevel="10" parentKey="Shadows">
 						<Layers>
 							<Layer level="BACKGROUND">
-								<Texture parentArray="Shadow" atlas="GarrFollower-Shadow" useAtlasSize="true">
+								<Texture parentArray="Shadow" atlas="GarrFollower-Shadow" useAtlasSize="true" alpha=".45">
 									<Anchors>
 										<Anchor point="BOTTOM" x="0" y="-35" relativeKey="$parent.$parent.Model1"/>
 									</Anchors>
 								</Texture>
-								<Texture parentArray="Shadow" atlas="GarrFollower-Shadow" useAtlasSize="true">
+								<Texture parentArray="Shadow" atlas="GarrFollower-Shadow" useAtlasSize="true" alpha=".45">
 									<Anchors>
 										<Anchor point="BOTTOM" x="0" y="-35" relativeKey="$parent.$parent.Model2"/>
 									</Anchors>
 								</Texture>
-								<Texture parentArray="Shadow" atlas="GarrFollower-Shadow" useAtlasSize="true">
+								<Texture parentArray="Shadow" atlas="GarrFollower-Shadow" useAtlasSize="true" alpha=".45">
 									<Anchors>
 										<Anchor point="BOTTOM" x="0" y="-35" relativeKey="$parent.$parent.Model3"/>
 									</Anchors>
 								</Texture>
-								<Texture parentArray="Shadow" atlas="GarrFollower-Shadow" useAtlasSize="true">
+								<Texture parentArray="Shadow" atlas="GarrFollower-Shadow" useAtlasSize="true" alpha=".45">
 									<Anchors>
 										<Anchor point="BOTTOM" x="0" y="-35" relativeKey="$parent.$parent.Model4"/>
 									</Anchors>
 								</Texture>
-								<Texture parentArray="Shadow" atlas="GarrFollower-Shadow" useAtlasSize="true">
+								<Texture parentArray="Shadow" atlas="GarrFollower-Shadow" useAtlasSize="true" alpha=".45">
 									<Anchors>
 										<Anchor point="BOTTOM" x="0" y="-35" relativeKey="$parent.$parent.Model5"/>
 									</Anchors>
@@ -943,20 +972,11 @@
 				</Frames>
 			</Frame>
 		</ScrollChild>
-		<Scripts>
-			<OnLoad method="OnLoad"/>
-			<OnMouseDown method="OnMouseDown"/>
-			<OnMouseUp method="OnMouseUp"/>
-		</Scripts>
 		<Frames>
 			<Frame parentKey="UpgradeFrame" inherits="GarrisonFollowerModelUpgradeTemplate">
 				<Anchors>
 					<Anchor point="BOTTOM" x="164" y="-423" relativePoint="TOPLEFT"/>
 				</Anchors>
-				<Scripts>
-					<OnMouseDown function="GarrisonFollowerPageModel_SpellCast_OnMouseDown"/>
-					<OnMouseUp function="GarrisonFollowerPageModel_SpellCast_OnMouseUp"/>
-				</Scripts>
 			</Frame>
 		</Frames>
 	</ScrollFrame>
@@ -1319,25 +1339,25 @@
 				</Anchors>
 				<Scripts>
 					<OnClick>
-						PlaySound("UI_Garrison_CommandTable_Nav_Next");
+						PlaySound(SOUNDKIT.UI_GARRISON_COMMAND_TABLE_NAV_NEXT);
 						self:GetParent():GetParent():NextMission();
 					</OnClick>
 				</Scripts>
 			</Button>
-			<Frame parentKey="LoadingFrame" inherits="LoadingSpinnerTemplate" hidden="true">
+			<Frame parentKey="LoadingFrame" inherits="SpinnerTemplate" hidden="true">
+				<Size x="20" y="20"/>
 				<Layers>
 					<Layer level="ARTWORK">
 						<FontString parentKey="Label" inherits="GameFontHighlight" text="LFG_LIST_LOADING">
 							<Anchors>
-								<Anchor point="LEFT" relativePoint="RIGHT"/>
+								<Anchor point="LEFT" relativePoint="RIGHT" x="5"/>
 							</Anchors>
 						</FontString>
 					</Layer>
 				</Layers>
 				<Scripts>
 					<OnLoad>
-						self.Anim:Play();
-						self:SetPoint("TOP", self:GetParent().NextMissionButton, "BOTTOM", -self.Label:GetWidth()/2, 4);
+						self:SetPoint("TOP", self:GetParent().NextMissionButton, "BOTTOM", -self.Label:GetWidth()/2, -9);
 					</OnLoad>
 				</Scripts>
 			</Frame>
@@ -1511,7 +1531,7 @@
 		</Scripts>
 	</Button>
 
-	<Frame name="GarrisonMissionMechanicTooltip" inherits="GameTooltipTemplate" frameStrata="TOOLTIP">
+	<GameTooltip name="GarrisonMissionMechanicTooltip" inherits="GameTooltipTemplate" frameStrata="TOOLTIP">
 		<Size x="280" y="200"/>
 		<Anchors>
 			<Anchor point="CENTER"/>
@@ -1544,9 +1564,9 @@
 				</FontString>
 			</Layer>
 		</Layers>
-	</Frame>
+	</GameTooltip>
 
-	<Frame name="GarrisonMissionMechanicFollowerCounterTooltip" inherits="GameTooltipTemplate" parent="UIParent" frameStrata="TOOLTIP">
+	<GameTooltip name="GarrisonMissionMechanicFollowerCounterTooltip" inherits="GameTooltipTemplate" parent="UIParent" frameStrata="TOOLTIP">
 		<Size x="280" y="250"/>
 		<Anchors>
 			<Anchor point="CENTER"/>
@@ -1556,7 +1576,7 @@
 				<Texture parentKey="Icon">
 					<Size x="20" y="20"/>
 					<Anchors>
-						<Anchor point="TOPLEFT" x="15" y="-43" relativeKey="$parent.Subtitle"/>
+						<Anchor point="TOPLEFT" x="15" y="-43" relativeKey="$parent"/>
 					</Anchors>
 				</Texture>
 			</Layer>
@@ -1601,6 +1621,6 @@
 				</FontString>
 			</Layer>
 		</Layers>
-	</Frame>
+	</GameTooltip>
 
 </Ui>

@@ -22,11 +22,11 @@ do
 end
 MAX_RAID_CLASS_BUTTONS = MAX_CLASSES + 3;
 
-RAID_PULLOUT_SAVED_SETTINGS = { 
-	["showTarget"] = true, 
-	["showBuffs"] = true, 
-	["showTargetTarget"] = true, 
-	["showDebuffs"] = true, 
+RAID_PULLOUT_SAVED_SETTINGS = {
+	["showTarget"] = true,
+	["showBuffs"] = true,
+	["showTargetTarget"] = true,
+	["showDebuffs"] = true,
 	["showBG"] = true,
 };
 
@@ -148,11 +148,12 @@ function RaidGroupFrame_OnLoad()
 	RaidFrame:RegisterEvent("UNIT_LEVEL");
 	RaidFrame:RegisterEvent("UNIT_HEALTH");
 	RaidFrame:RegisterEvent("PLAYER_ENTERING_WORLD");
-	RaidFrame:RegisterEvent("VARIABLES_LOADED")
+	RaidFrame:RegisterEvent("VARIABLES_LOADED");
+	RaidFrame:RegisterEvent("RAID_ROSTER_UPDATE");
 	RaidFrame:SetScript("OnHide", RaidGroupFrame_OnHide);
 	RaidFrame:SetScript("OnEvent", RaidGroupFrame_OnEvent);
 	RaidFrame:SetScript("OnUpdate", RaidGroupFrame_OnUpdate);
-	
+
 	RaidFrame.showRange = GetCVarBool("showRaidRange");
 end
 
@@ -183,6 +184,8 @@ function RaidGroupFrame_OnEvent(self, event, ...)
 		RaidPullout_RenewFrames();
 	elseif ( event == "VARIABLES_LOADED" ) then
 		RaidFrame.showRange = GetCVarBool("showRaidRange");
+	elseif ( event == "RAID_ROSTER_UPDATE" ) then
+		RaidGroupFrame_Update();
 	end
 end
 
@@ -219,15 +222,15 @@ function RaidGroupFrame_Update()
 			raid_groupFrames[i] = _G["RaidGroup"..i];
 		end
 	end
-	
+
 	if ( not classes ) then
 		classes = {};
 		for i=1, MAX_RAID_CLASS_BUTTONS do
 			classes[i] = _G["RaidClassButton"..i];
 		end
 	end
-	
-	
+
+
 	if ( not IsInRaid() ) then
 		for i=1, NUM_RAID_GROUPS do
 			raid_groupFrames[i]:Hide()
@@ -238,9 +241,6 @@ function RaidGroupFrame_Update()
 	else
 		for i=1, NUM_RAID_GROUPS do
 			raid_groupFrames[i]:Show();
-		end
-		for i=1, MAX_RAID_CLASS_BUTTONS do
-			--classes[i]:Show();
 		end
 	end
 
@@ -256,7 +256,7 @@ function RaidGroupFrame_Update()
 	for i, j in next, RAID_SUBGROUP_LISTS do
 		RAID_SUBGROUP_LISTS[i] = nil;
 	end
-	
+
 	for i=1, NUM_RAID_GROUPS do
 		if ( RAID_SUBGROUP_LISTS[i] ) then
 			for k, v in next, RAID_SUBGROUP_LISTS[i] do
@@ -283,24 +283,23 @@ function RaidGroupFrame_Update()
 	local numRaidMembers = GetNumGroupMembers();
 	local raidGroup, color;
 	local buttonFrameName, buttonName, buttonLevel, buttonClass, buttonRank;
-	local name, rank, subgroup, level, class, fileName, zone, online, isDead, role, loot, muted, unit;
+	local name, rank, subgroup, level, class, fileName, zone, online, isDead, role, loot, unit;
 	local buttonCount;
 	local readyCheckStatus;
 	local button, subframes;
-	
+
 	if ( not raid_buttons ) then
 		raid_buttons = {};
 		for i = 1, MAX_RAID_MEMBERS do
 			raid_buttons[i] = _G["RaidGroupButton"..i];
 		end
 	end
-	
+
 	for i=1, MAX_RAID_MEMBERS do
 		button = raid_buttons[i];
 		if ( isRaid and i <= numRaidMembers ) then
 			name, rank, subgroup, level, class, fileName, zone, online, isDead, role, loot = GetRaidRosterInfo(i);
 			unit = "raid"..i;
-			muted = GetMuteStatus(unit, "raid");
 			raidGroup = raid_groupFrames[subgroup];
 			readyCheckStatus = GetReadyCheckStatus(unit);
 			-- To prevent errors when the server hiccups
@@ -313,22 +312,19 @@ function RaidGroupFrame_Update()
 					subframes.level = _G["RaidGroupButton"..i.."Level"];
 					subframes.rank = _G["RaidGroupButton"..i.."Rank"];
 					subframes.role = _G["RaidGroupButton"..i.."Role"];
-					subframes.loot = _G["RaidGroupButton"..i.."Loot"];
 					subframes.rankTexture = _G["RaidGroupButton"..i.."RankTexture"];
-					--buttonMutedTexture = _G["RaidGroupButton"..i.."RankMuted"];
 					subframes.roleTexture = _G["RaidGroupButton"..i.."RoleTexture"];
-					subframes.lootTexture = _G["RaidGroupButton"..i.."LootTexture"];
 					subframes.readyCheck = _G["RaidGroupButton"..i.."ReadyCheck"];
 					button.subframes = subframes;
 				end
-				
+
 				button.name = name;
 				button.class = fileName;
 
 				if ( level == 0 ) then
 					level = "";
 				end
-				
+
 				if ( not name ) then
 					name = UNKNOWN;
 				end
@@ -342,10 +338,10 @@ function RaidGroupFrame_Update()
 					--if ( UnitExists("raidpet"..i) ) then
 					if ( fileName == "HUNTER" or fileName == "WARLOCK" ) then
 						tinsert(RAID_SUBGROUP_LISTS["PETS"], i);
-					end		
+					end
 					--end
 				end
-				
+
 				-- Place Main Tank & Main Assist into a subgroup
 				if ( role ) then
 					tinsert(RAID_SUBGROUP_LISTS[role], i);
@@ -381,20 +377,12 @@ function RaidGroupFrame_Update()
 					subframes.level:SetTextColor(GRAY_FONT_COLOR.r, GRAY_FONT_COLOR.g, GRAY_FONT_COLOR.b);
 				end
 
-				--[[if ( muted ) then
-					buttonMutedTexture:Show();
-				else
-					buttonMutedTexture:Hide();
-				end]]
-
 				-- Sets the Leader/Assistant Icon
 				if ( rank == 2 ) then
 					subframes.rankTexture:SetTexture("Interface\\GroupFrame\\UI-Group-LeaderIcon");
 				elseif ( rank == 1 ) then
 					subframes.rankTexture:SetTexture("Interface\\GroupFrame\\UI-Group-AssistantIcon");
-				elseif ( (rank == 0 ) and muted ) then
-					subframes.rankTexture:SetTexture("Interface\\Common\\VoiceChat-Speaker");
-				else 
+				else
 					subframes.rankTexture:SetTexture("");
 				end
 
@@ -407,43 +395,32 @@ function RaidGroupFrame_Update()
 					subframes.roleTexture:SetTexture("");
 				end
 
-				-- Sets the Master Looter Icon
-				if ( loot ) then
-					subframes.lootTexture:SetTexture("Interface\\GroupFrame\\UI-Group-MasterLooter");
-				else
-					subframes.lootTexture:SetTexture("");
-				end
-
 				-- Resizes if there are all 3 visible
-				if ( ( rank > 0 ) and role and loot ) then
+				if ( ( rank > 0 ) and role ) then
 					subframes.rank:SetWidth(10);
 					subframes.rank:SetHeight(10);
 					subframes.role:SetWidth(10);
 					subframes.role:SetHeight(10);
-					subframes.loot:SetWidth(9);
-					subframes.loot:SetHeight(9);
-					subframes.readyCheck:SetWidth(10);
-					subframes.readyCheck:SetHeight(10);
+					subframes.readyCheck:SetWidth(12);
+					subframes.readyCheck:SetHeight(12);
 				else
 					subframes.rank:SetWidth(11);
 					subframes.rank:SetHeight(11);
 					subframes.role:SetWidth(11);
 					subframes.role:SetHeight(11);
-					subframes.loot:SetWidth(11);
-					subframes.loot:SetHeight(11);
-					subframes.readyCheck:SetWidth(11);
-					subframes.readyCheck:SetHeight(11);
+					subframes.readyCheck:SetWidth(14);
+					subframes.readyCheck:SetHeight(14);
 				end
-				
+
 				button.jobs = button.jobs or {};
-				
-				for i, j in next, button.jobs do
-					button.jobs[i] = nil;
+
+				for j in next, button.jobs do
+					button.jobs[j] = nil;
 				end
-				
+
 				buttonCount = 0;
 
-				if ( rank > 0 or muted ) then
+				if ( rank > 0 ) then
 					tinsert(button.jobs, subframes.rank);
 					buttonCount = buttonCount + 1;
 				else
@@ -451,26 +428,19 @@ function RaidGroupFrame_Update()
 				end
 
 				if ( role ) then
-					tinsert(button.jobs, subframes.role);			
+					tinsert(button.jobs, subframes.role);
 					buttonCount = buttonCount + 1;
 				else
 					subframes.role:Hide();
 				end
 
-				if ( loot ) then
-					tinsert(button.jobs, subframes.loot);
-					buttonCount = buttonCount + 1;
-				else
-					subframes.loot:Hide();
-				end
-				
-				for i=1, buttonCount, 1 do
-					if ( i == 1 ) then
-						button.jobs[i]:SetPoint("LEFT", button, "LEFT", 2, 0);
+				for jobIndex=1, buttonCount, 1 do
+					if ( jobIndex == 1 ) then
+						button.jobs[jobIndex]:SetPoint("LEFT", button, "LEFT", 2, 0);
 					else
-						button.jobs[i]:SetPoint("LEFT", button.jobs[i-1], "RIGHT", -1, 0);
+						button.jobs[jobIndex]:SetPoint("LEFT", button.jobs[jobIndex-1], "RIGHT", -1, 0);
 					end
-					button.jobs[i]:Show();
+					button.jobs[jobIndex]:Show();
 				end
 
 				-- Sets the Ready Check Icon
@@ -493,9 +463,10 @@ function RaidGroupFrame_Update()
 
 				-- Save slot for future use
 				button.slot = raid_groupSlots[subgroup][raidGroup.nextIndex];
-				
+
 				-- Anchor button to slot
 				if ( MOVING_RAID_MEMBER ~= button  ) then
+					button:ClearAllPoints();
 					button:SetPoint("TOPLEFT", button.slot, "TOPLEFT", 0, 0);
 				end
 
@@ -506,7 +477,6 @@ function RaidGroupFrame_Update()
 				raidGroup.nextIndex = raidGroup.nextIndex + 1;
 				button.rank = rank;
 				button.role = role;
-				button.loot = loot;
 				button:SetID(i);
 				button:Show();
 			end
@@ -514,12 +484,10 @@ function RaidGroupFrame_Update()
 			button:Hide();
 		end
 	end
-	
-	if ( isRaid ) then
-		RaidFrameAllAssistCheckButton:Show();
-	else
-		RaidFrameAllAssistCheckButton:Hide();
-	end
+
+	RaidFrameAllAssistCheckButton:SetShown(isRaid);
+	RaidFrame.RoleCount:SetShown(isRaid);
+
 	-- Update Class Count Buttons
 	RaidClassButton_Update();
 end
@@ -585,15 +553,14 @@ function RaidGroupFrame_ReadyCheckFinished()
 	end
 end
 
-function RaidGroupButton_ShowMenu(self)
-	HideDropDownMenu(1);
-	if ( self.id and self.name ) then
-		FriendsDropDown.name = self.name;
-		FriendsDropDown.id = self.id;
-		FriendsDropDown.unit = self.unit;
-		FriendsDropDown.initialize = RaidFrameDropDown_Initialize;
-		FriendsDropDown.displayMode = "MENU";
-		ToggleDropDownMenu(1, nil, FriendsDropDown, "cursor");
+function RaidGroupButton_OpenMenu(self)
+	if self.id and self.name then
+		local contextData =
+		{
+			unit = self.unit,
+			name = self.name;
+		};
+		UnitPopup_OpenMenu("RAID", contextData);
 	end
 end
 
@@ -602,7 +569,7 @@ function RaidGroupButton_OnLoad(self)
 	self:RegisterForDrag("LeftButton");
 	self:RegisterForClicks("LeftButtonUp", "RightButtonUp");
 	self.raidButton = self;
-	
+
 	self.id = self:GetID();
 	self.unit = "raid"..self.id;
 end
@@ -614,8 +581,6 @@ function RaidGroupButton_OnDragStart(raidButton)
 	local cursorX, cursorY = GetCursorPosition();
 	local uiScale = UIParent:GetScale();
 	raidButton:StartMoving();
-	raidButton:ClearAllPoints();
-	raidButton:SetPoint("CENTER", UIPARENT, "BOTTOMLEFT", cursorX / uiScale, cursorY / uiScale);
 	MOVING_RAID_MEMBER = raidButton;
 end
 
@@ -623,13 +588,15 @@ function RaidGroupButton_OnDragStop(raidButton)
 	if ( not UnitIsGroupLeader("player") and not UnitIsGroupAssistant("player") ) then
 		return;
 	end
-	
+
 	raidButton:StopMovingOrSizing();
+	raidButton:ClearAllPoints();
+	raidButton:SetPoint("TOPLEFT", raidButton.slot, "TOPLEFT", 0, 0);
+
 	MOVING_RAID_MEMBER = nil;
 	if ( TARGET_RAID_SLOT and TARGET_RAID_SLOT:GetParent():GetID() ~= raidButton.subgroup ) then
 		if (TARGET_RAID_SLOT.button) then
 			local button = _G[TARGET_RAID_SLOT.button];
-			--button:SetPoint("TOPLEFT", this, "TOPLEFT", 0, 0);
 			SwapRaidSubgroup(raidButton:GetID(), button:GetID());
 		else
 			local slot = TARGET_RAID_SLOT:GetParent():GetName().."Slot"..TARGET_RAID_SLOT:GetParent().nextIndex;
@@ -642,8 +609,6 @@ function RaidGroupButton_OnDragStop(raidButton)
 		if ( TARGET_RAID_SLOT ) then
 			TARGET_RAID_SLOT:UnlockHighlight();
 		end
-		raidButton:ClearAllPoints();
-		raidButton:SetPoint("TOPLEFT", raidButton.slot, "TOPLEFT", 0, 0);
 	end
 end
 
@@ -651,10 +616,6 @@ function RaidGroupButton_OnEnter(raidbutton)
 	if ( raidbutton.unit ) then
 		UnitFrame_UpdateTooltip(raidbutton);
 	end
-end
-
-function RaidFrameDropDown_Initialize(self)
-	UnitPopup_ShowMenu(UIDROPDOWNMENU_OPEN_MENU, "RAID", self.unit, self.name, self.id);
 end
 
 function RaidButton_OnClick(self, button)
@@ -682,7 +643,7 @@ function RaidPullout_ReadyCheckFinished(pulloutFrame)
 end
 
 function RaidPullout_ReadyCheckFinishFunc(pulloutButton)
-	RefreshAuras(pulloutButton, pulloutButton.unit, MAX_RAID_AURAS, "Aura", true, pulloutButton:GetParent().showBuffs);
+	AuraUtil.RefreshAuras(pulloutButton, pulloutButton.unit, MAX_RAID_AURAS, "Aura", true, pulloutButton:GetParent().showBuffs);
 end
 
 function RaidPullout_GeneratePulloutFrame(fileName, class)
@@ -707,7 +668,7 @@ function RaidPullout_GeneratePulloutFrame(fileName, class)
 			pullOutFrame.showTarget = 1;
 			if (  fileName == "MAINTANK" ) then
 				pullOutFrame.showTargetTarget = 1;
-			else 
+			else
 				pullOutFrame.showTargetTarget = nil;
 			end
 		else
@@ -717,7 +678,7 @@ function RaidPullout_GeneratePulloutFrame(fileName, class)
 		end
 
 		if ( RaidPullout_Update(pullOutFrame) ) then
-			return pullOutFrame;		
+			return pullOutFrame;
 		end
 	end
 end
@@ -747,7 +708,7 @@ function RaidPullout_UpdateTarget(pullOutFrame, pullOutButton, unit, which)
 			name:SetText(unitName);
 			securecall("UnitFrameHealthBar_Initialize", unit, statusBar, nil, true);
 			securecall("UnitFrameHealthBar_Update", statusBar, unit);
-			
+
 			-- If Unknown, turn the bar grey and fill it
 			if ( not class ) then
 				statusBar:SetMinMaxValues(0,1);
@@ -772,7 +733,7 @@ function RaidPullout_UpdateTarget(pullOutFrame, pullOutButton, unit, which)
 			statusBar:SetMinMaxValues(0,1);
 			statusBar:SetValue(1);
 			name:SetText("");
-			name:Hide();							
+			name:Hide();
 			statusBar:SetStatusBarColor(0.5, 0.5, 0.5, 1.0);
 			if ( which == "TargetTarget" ) then
 				statusBar:Hide();
@@ -849,8 +810,7 @@ function RaidPullout_Update(pullOutFrame)
 
 	-- Fill out the buttons
 	local pulloutButton, pulloutButtonName, color, unit, target;
-	local pulloutHealthBar, pulloutManaBar, pulloutThreatIndicator;
-	local pulloutClearButton;
+	local pulloutHealthBar, pulloutManaBar;
 	if ( numPulloutEntries > pullOutFrame.numPulloutButtons ) then
 		local index = pullOutFrame.numPulloutButtons + 1;
 		local relative;
@@ -875,7 +835,6 @@ function RaidPullout_Update(pullOutFrame)
 			pulloutButtonName = pulloutButton.nameLabel;
 			pulloutHealthBar = pulloutButton.healthbar;
 			pulloutManaBar = pulloutButton.manabar;
-			pulloutThreatIndicator = pulloutButton.threatIndicator;
 			if ( pulloutList ) then
 				id = pulloutList[i];
 			elseif ( single ) then
@@ -915,8 +874,6 @@ function RaidPullout_Update(pullOutFrame)
 			pulloutButton.secondaryUnit = unit;
 
 			-- Set for tooltip support
-			pulloutClearButton = pulloutButton.clearButton;
-			SecureUnitButton_OnLoad(pulloutClearButton, unit, RaidPulloutButton_ShowMenu);
 			pullOutFrame.name = name;
 			pullOutFrame.single = single;
 			pulloutButton.raidIndex = id;
@@ -925,7 +882,7 @@ function RaidPullout_Update(pullOutFrame)
 			RaidPulloutButton_UpdateSwapFrames(pulloutButton, unit)
 
 			local minVal, maxVal;
-			if ( online ) then	
+			if ( online ) then
 				RaidPulloutButton_UpdateDead(pulloutButton, isDead, fileName);
 			else
 				-- Offline so set name grey and full alpha
@@ -936,8 +893,6 @@ function RaidPullout_Update(pullOutFrame)
 				end
 				pulloutButtonName:SetVertexColor(GRAY_FONT_COLOR.r, GRAY_FONT_COLOR.g, GRAY_FONT_COLOR.b);
 			end
-
-			RaidPulloutButton_UpdateVoice(pulloutButton);
 
 			-- Handle unit's target
 			RaidPullout_UpdateTarget(pullOutFrame:GetName(), pulloutButton:GetName(), pulloutButton.unit.."target", "Target");
@@ -955,14 +910,14 @@ function RaidPullout_Update(pullOutFrame)
 				end
 
 				-- hide auras while ready check is up
-				for i=1, MAX_RAID_AURAS do
-					_G[pulloutButton:GetName().."Aura"..i]:Hide();
+				for auraIndex=1, MAX_RAID_AURAS do
+					_G[pulloutButton:GetName().."Aura"..auraIndex]:Hide();
 				end
 			else
 				_G[pulloutButton:GetName().."ReadyCheck"]:Hide();
 
 				-- Handle auras if ready check is hidden
-				RefreshAuras(pulloutButton, pulloutButton.unit, MAX_RAID_AURAS, "Aura", true, pullOutFrame.showBuffs);
+				AuraUtil.RefreshAuras(pulloutButton, pulloutButton.unit, MAX_RAID_AURAS, "Aura", true, pullOutFrame.showBuffs);
 			end
 
 			--Handle vehicle indicator
@@ -976,9 +931,6 @@ function RaidPullout_Update(pullOutFrame)
 			pulloutButton:RegisterEvent("UNIT_HEALTH");
 			pulloutButton:RegisterEvent("UNIT_AURA");
 			pulloutButton:RegisterEvent("UNIT_NAME_UPDATE");
-			pulloutButton:RegisterEvent("VOICE_STATUS_UPDATE");
-			pulloutButton:RegisterEvent("VOICE_START");
-			pulloutButton:RegisterEvent("VOICE_STOP");
 			pulloutButton:RegisterEvent("UNIT_ENTERED_VEHICLE");
 			pulloutButton:RegisterEvent("UNIT_EXITED_VEHICLE");
 			pulloutButton:Show();
@@ -987,9 +939,6 @@ function RaidPullout_Update(pullOutFrame)
 			pulloutButton:UnregisterEvent("UNIT_HEALTH");
 			pulloutButton:UnregisterEvent("UNIT_AURA");
 			pulloutButton:UnregisterEvent("UNIT_NAME_UPDATE");
-			pulloutButton:UnregisterEvent("VOICE_STATUS_UPDATE");
-			pulloutButton:UnregisterEvent("VOICE_START");
-			pulloutButton:UnregisterEvent("VOICE_STOP");
 			pulloutButton:UnregisterEvent("UNIT_ENTERED_VEHICLE");
 			pulloutButton:UnregisterEvent("UNIT_EXITED_VEHICLE");
 			pulloutButton:Hide();
@@ -1002,21 +951,18 @@ function RaidPullout_Update(pullOutFrame)
 	if ( pullOutFrame.showTarget ) then
 		buttonHeight = buttonHeight + 15;
 	end
-	
+
 	if ( pullOutFrame.showBG == false ) then
 		_G[pullOutFrame:GetName().."MenuBackdrop"]:Hide();
 	end
-	
+
 	pullOutFrame:SetHeight( (numPulloutEntries * buttonHeight) + 14);
 	pullOutFrame:Show();
 	return 1;
 end
 
 function RaidPulloutButton_OnEvent(self, event, ...)
-	local speaker = self.speaker;
-	if ( event == "PLAYER_ENTERING_WORLD" ) then
-		RaidPulloutButton_UpdateVoice(self);
-	elseif ( event == "UNIT_HEALTH" ) then
+	if ( event == "UNIT_HEALTH" ) then
 		local arg1 = ...;
 		if ( arg1 == self.unit ) then
 			local name, rank, subgroup, level, class, fileName, zone, online, isDead = GetRaidRosterInfo(self.raidIndex);
@@ -1029,32 +975,9 @@ function RaidPulloutButton_OnEvent(self, event, ...)
 		local arg1 = ...;
 		if ( arg1 == self.unit ) then
 			if ( not _G[self:GetName().."ReadyCheck"]:IsShown() ) then
-				RefreshAuras(self, self.unit, MAX_RAID_AURAS, "Aura", true, self:GetParent().showBuffs);
+				AuraUtil.RefreshAuras(self, self.unit, MAX_RAID_AURAS, "Aura", true, self:GetParent().showBuffs);
 			end
 		end
-	elseif ( event == "VOICE_START") then
-		local arg1 = ...;
-		if ( arg1 == (self.secondaryUnit or self.unit) ) then
-			speaker.timer = nil;
-			speaker:Show();
-			UIFrameFadeIn(speaker, 0.2, speaker:GetAlpha(), 1);
-			if ( not self.muted ) then
-				VoiceChat_Animate(speaker, 1);
-			end
-		end
-	elseif ( event == "VOICE_STOP" ) then
-		local arg1 = ...;
-		if ( arg1 == (self.secondaryUnit or self.unit) ) then
-			speaker.timer = VOICECHAT_DELAY;
-			VoiceChat_Animate(speaker, nil);
-			if ( self.muted ) then
-				speaker:Show();
-			else
-				UIFrameFadeOut(speaker, 0.2, speaker:GetAlpha(), 0);
-			end
-		end
-	elseif ( event == "VOICE_STATUS_UPDATE" ) then
-		RaidPulloutButton_UpdateVoice(self);
 	elseif (( event == "UNIT_ENTERED_VEHICLE" ) or ( event == "UNIT_EXITED_VEHICLE" )) then
 		local arg1 = ...;
 		if ( arg1 == (self.secondaryUnit or self.unit) ) then
@@ -1074,7 +997,7 @@ function RaidPulloutButton_UpdateSwapFrames(self, unit)
 		self.secondaryUnit = unit;
 		unit = prefix.."pet"..id;
 		self.unit = unit;
-		_G[self:GetName().."ClearButton"]:SetAttribute("unit", unit)		
+		_G[self:GetName().."ClearButton"]:SetAttribute("unit", unit)
 	elseif ( self.secondaryUnit ) then
 		self.unit = self.secondaryUnit;
 		_G[self:GetName().."ClearButton"]:SetAttribute("unit", self.secondaryUnit);
@@ -1104,40 +1027,10 @@ function RaidPulloutButton_UpdateDead(button, isDead, class)
 	end
 end
 
-function RaidPulloutButton_UpdateVoice(pullOutButton)
-	local button = pullOutButton:GetName();
-	local icon = pullOutButton.speaker;
-	local muted = _G[button.."SpeakerMuted"];
-	local muteStatus = GetMuteStatus(UnitName((pullOutButton.secondaryUnit or pullOutButton.unit)), "raid");
-	local state = UnitIsTalking(UnitName(pullOutButton.secondaryUnit or pullOutButton.unit));
-	if ( muteStatus ) then
-		VoiceChat_Animate(icon, nil);
-		icon:SetAlpha(1);
-		icon:Show();
-		muted:Show();
-	else
-		if ( state ) then
-			VoiceChat_Animate(icon, 1);
-			icon:Show();
-		else
-			VoiceChat_Animate(icon, nil);
-			icon:Hide();
-		end
-		muted:Hide();
-	end
-	pullOutButton.muted = muteStatus;
-end
-
-function RaidPulloutButton_ShowMenu(self)
-	ToggleDropDownMenu(1, nil, _G[self:GetParent():GetParent():GetName().."DropDown"]);
-end
-
 function RaidPulloutButton_OnLoad(self)
 	self:RegisterForClicks("LeftButtonUp", "RightButtonUp");
 	self:RegisterEvent("UNIT_NAME_UPDATE");
 	self:SetFrameLevel(self:GetFrameLevel() + 1);
-
-	self.showmenu = RaidPulloutButton_ShowMenu;
 end
 
 function RaidPulloutButton_OnDragStart(frame)
@@ -1161,7 +1054,7 @@ function RaidPulloutStopMoving(frame)
 		frame:StopMovingOrSizing();
 		frame:SetFrameStrata("BACKGROUND");
 		frame:ClearAllPoints();
-		
+
 		local x, _ = frame:GetCenter();
 		local y = frame:GetTop();
 		frame:SetPoint("TOP", nil, "BOTTOMLEFT", x, y);
@@ -1172,7 +1065,7 @@ function RaidPulloutStopMoving(frame)
 end
 
 function RaidPullout_SaveFrames(pullOutFrame)
-	local point, relativeTo, relativePoint, offsetX, offsetY = pullOutFrame:GetPoint();
+	local point, relativeTo, relativePoint, offsetX, offsetY = pullOutFrame:GetPoint(1);
 	local filterID = tostring(pullOutFrame.filterID);
 	local settings = {};
 	if ( pullOutFrame:IsShown() ) then
@@ -1186,14 +1079,14 @@ function RaidPullout_SaveFrames(pullOutFrame)
 					tremove(RAID_SINGLE_POSITIONS, index);
 				end
 			end
-			
+
 			-- Get its settings
 			for setting in next, RAID_PULLOUT_SAVED_SETTINGS do
 				if ( pullOutFrame[setting] ~= nil ) then
 					settings[setting] = pullOutFrame[setting];
 				end
 			end
-			
+
 			-- Save its position and settings
 			tinsert(RAID_SINGLE_POSITIONS, 1, { point = point, relativePoint = relativePoint, x = offsetX, y = offsetY, name = pullOutFrame.filterID, ["settings"] = settings });
 		else
@@ -1211,13 +1104,13 @@ function RaidPullout_SaveFrames(pullOutFrame)
 			if ( pullOutFrame.class ) then
 				RAID_PULLOUT_POSITIONS[filterID].class = pullOutFrame.class;
 			end
-			
+
 			for setting in next, RAID_PULLOUT_SAVED_SETTINGS do
 				if ( pullOutFrame[setting] ~= nil ) then
 					settings[setting] = pullOutFrame[setting];
 				end
 			end
-			
+
 			RAID_PULLOUT_POSITIONS[filterID]["settings"] = settings;
 		end
 	end
@@ -1227,7 +1120,7 @@ function RaidPullout_RenewFrames()
 	local pullOutFrame;
 	for index, pullOut in pairs(RAID_PULLOUT_POSITIONS) do
 		if ( tonumber(index) ) then
-			pullOutFrame = RaidPullout_GeneratePulloutFrame(tonumber(index));		
+			pullOutFrame = RaidPullout_GeneratePulloutFrame(tonumber(index));
 		else
 			pullOutFrame = RaidPullout_GeneratePulloutFrame(index, pullOut["class"]);
 		end
@@ -1240,13 +1133,13 @@ function RaidPullout_RenewFrames()
 				end
 				pullOutFrame:SetPoint(pullOut["point"], UIParent, pullOut["relativePoint"], pullOut["x"], pullOut["y"]);
 			end
-			
+
 			if ( pullOut.settings ) then
 				for setting, value in next, pullOut.settings do
 					pullOutFrame[setting] = value;
-				end			
+				end
 			end
-			
+
 			RaidPullout_Update(pullOutFrame);
 		end
 	end
@@ -1262,13 +1155,13 @@ function RaidPullout_RenewFrames()
 					end
 					pullOutFrame:SetPoint(pullOut["point"], UIParent, pullOut["relativePoint"], pullOut["x"], pullOut["y"]);
 				end
-				
+
 				if ( pullOut.settings ) then
 					for setting, value in next, pullOut.settings do
 						pullOutFrame[setting] = value;
 					end
 				end
-				
+
 				RaidPullout_Update(pullOutFrame);
 			end
 		end
@@ -1280,8 +1173,8 @@ function RaidPullout_MatchName(name)
 		for i=1, GetNumGroupMembers(), 1 do
 			if ( name == GetRaidRosterInfo(i) ) then
 				return i;
-			end			
-		end	
+			end
+		end
 	end
 end
 
@@ -1308,190 +1201,3 @@ function RaidPullout_GetFrame(filterID)
 	raid_pullout_frames[NUM_RAID_PULLOUT_FRAMES] = frame;
 	return frame;
 end
-
-function RaidPulloutDropDown_OnLoad(self)
-	self.raidPulloutDropDown = true;
-	UIDropDownMenu_Initialize(self, RaidPulloutDropDown_Initialize, "MENU");
-	UIDropDownMenu_SetAnchor(self, 0, 0, "TOPLEFT", self:GetParent():GetName(), "TOPRIGHT")
-end
-
-function RaidPulloutDropDown_Initialize()
-	if ( not UIDROPDOWNMENU_OPEN_MENU or not UIDROPDOWNMENU_OPEN_MENU.raidPulloutDropDown ) then
-		return;
-	end
-	local currentPullout = UIDROPDOWNMENU_OPEN_MENU:GetParent();
-	local unit, voice, muted, silenced, pvpType;
-	local info = UIDropDownMenu_CreateInfo();
-
-	if ( IsVoiceChatEnabled() ) then
-		-- Display the option to mute voice chat.	
-		for i=1, currentPullout.numPulloutButtons do
-			local button = _G[currentPullout:GetName().."Button"..i];
-			if ( button:IsMouseOver() ) then
-				unit = (button.secondaryUnit or button.unit);
-				break;
-			end
-		end
-		if ( unit and currentPullout.filterID ~= "PETS" ) then
-			if ( UnitInBattleground("player") ) then
-				pvpType = "battleground";
-			else
-				pvpType = "raid";
-			end
-			voice = GetVoiceStatus(UnitName(unit), pvpType);
-		end
-		if ( voice ) then
-			-- Set a name header
-			if ( not UnitIsUnit(unit, "player") or UnitIsGroupAssistant("player") ) then
-				info = UIDropDownMenu_CreateInfo();
-				info.text = UnitName(unit);
-				info.isTitle = 1;
-				info.notCheckable = nil;
-				info.disabled = nil;
-				UIDropDownMenu_AddButton(info);
-
-				-- Set a mute option
-				muted = IsMuted(UnitName(unit));	
-				if ( muted ) then
-					info.text = UNMUTE;
-				else
-					info.text = MUTE;
-				end
-				info.func = function()
-					AddOrDelMute(unit);
-				end;
-				info.checked = nil;
-				info.isTitle = nil;
-				info.notCheckable = nil;
-				info.disabled = nil;
-				UIDropDownMenu_AddButton(info);
-			end
-			
-			-- Display the option to silence voice chat if RaidLeader.	
-			if ( UnitIsGroupAssistant("player") ) then
-				silenced = UnitIsSilenced(UnitName(unit), "raid");	
-				if ( not silenced ) then
-					info.text = RAID_SILENCE;
-					info.func = function()
-						ChannelSilenceVoice("raid", UnitName(unit));
-					end;
-				else
-					info.text = RAID_UNSILENCE;
-					info.func = function()
-						ChannelUnSilenceVoice("raid", UnitName(unit));
-					end;
-				end
-				info.isTitle = nil;
-				info.notCheckable = nil;
-				info.disabled = nil;
-				UIDropDownMenu_AddButton(info);
-			end
-			if ( not UnitIsUnit(unit, "player") or UnitIsGroupAssistant("player") ) then
-				-- spacer
-				info = UIDropDownMenu_CreateInfo();
-				info.isTitle = 1;
-				info.notCheckable = 1;
-				UIDropDownMenu_AddButton(info);
-			end
-		end
-	end
-
-	-- Show target if it is allowed
-	info.text = SHOW_TARGET;
-	info.func = function()
-		if ( currentPullout.showTarget == 1 ) then
-			currentPullout.showTarget = nil;
-		else
-			currentPullout.showTarget = 1;
-		end
-		RaidPullout_Update(currentPullout);
-		RaidPullout_SaveFrames(currentPullout);
-	end;
-	info.checked = currentPullout.showTarget;
-	info.isTitle = nil;
-	info.disabled = nil;
-	info.notCheckable = nil;
-	UIDropDownMenu_AddButton(info);
-
-	if ( currentPullout.showTarget == 1 ) then
-		info.text = SHOW_TARGET_OF_TARGET_TEXT;
-		info.func = function()
-			if ( currentPullout.showTargetTarget == 1 ) then
-				currentPullout.showTargetTarget = nil;
-			else
-				currentPullout.showTargetTarget = 1;
-			end
-			RaidPullout_Update(currentPullout);
-			RaidPullout_SaveFrames(currentPullout);
-		end;
-		info.checked = currentPullout.showTargetTarget;
-		info.isTitle = nil;
-		info.disabled = nil;
-		info.notCheckable = nil;
-		UIDropDownMenu_AddButton(info);
-	end
-
-	-- Show buffs or debuffs they are exclusive for now
-	info.text = SHOW_BUFFS;
-	info.func = function()
-		currentPullout.showBuffs = 1;
-		RaidPullout_Update(currentPullout);
-		RaidPullout_SaveFrames(currentPullout);
-	end;
-	info.checked = currentPullout.showBuffs;
-	UIDropDownMenu_AddButton(info);
-
-	info.text = SHOW_DEBUFFS;
-	info.func = function()
-		currentPullout.showBuffs = nil;
-		RaidPullout_Update(currentPullout);
-		RaidPullout_SaveFrames(currentPullout);
-	end;
-	info.checked = (not currentPullout.showBuffs);
-	info.isTitle = nil;
-	info.disabled = nil;
-	info.notCheckable = nil;
-	UIDropDownMenu_AddButton(info);
-	
-	-- Hide background option
-	local backdrop = _G[currentPullout:GetName().."MenuBackdrop"];
-	info.text = HIDE_PULLOUT_BG;
-	info.func = function ()
-		currentPullout.showBG = (not backdrop:IsShown());
-		if ( backdrop:IsShown() ) then
-			backdrop:Hide();
-		else
-			backdrop:Show();
-		end
-		RaidPullout_SaveFrames(currentPullout);
-	end;
-	info.checked = (not backdrop:IsShown());
-	info.isTitle = nil;
-	info.disabled = nil;
-	info.notCheckable = nil;
-	UIDropDownMenu_AddButton(info);
-
-	-- Close option
-	info.text = CLOSE;
-	info.func = function()
-		if ( currentPullout.showTarget == 1 ) then
-			currentPullout.showTarget = nil;
-		end
-		if ( RAID_PULLOUT_POSITIONS[tostring(currentPullout.filterID)] ) then
-			RAID_PULLOUT_POSITIONS[tostring(currentPullout.filterID)] = nil;
-		end
-		for index, value in pairs(RAID_SINGLE_POSITIONS) do
-			if ( value["name"] == currentPullout.filterID ) then
-				tremove(RAID_SINGLE_POSITIONS, index);
-			end
-		end 
-		currentPullout:Hide();
-	end;
-	info.checked = nil;
-	info.isTitle = nil;
-	info.disabled = nil;
-	info.notCheckable = nil;
-	UIDropDownMenu_AddButton(info);
-end
-
-

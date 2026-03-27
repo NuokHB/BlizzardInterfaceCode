@@ -1,95 +1,79 @@
----------------
---NOTE - Please do not change this section without talking to Jacob
---We usually don't want to call out of this environment from this file. Calls should usually go through Outbound
-local _, tbl = ...;
-tbl.SecureCapsuleGet = SecureCapsuleGet;
 
-local function Import(name)
-	tbl[name] = tbl.SecureCapsuleGet(name);
+local BalanceEnabled = nil;
+local BalanceAmount = 0;
+
+local currencyMult = 100;
+
+local FormatCurrencyStringShort = nil;
+local FormatCurrencyStringLong = nil;
+local REGION_US = 1;
+local REGION_KR = 2;
+local REGION_EU = 3;
+local REGION_TW = 4;
+local REGION_CN = 5;
+local REGION_BETA = 98;
+
+local function formatLargeNumber(amount)
+	amount = tostring(amount);
+	local newDisplay = "";
+	local strlen = amount:len();
+	--Add each thing behind a comma
+	for i=4, strlen, 3 do
+		newDisplay = LARGE_NUMBER_SEPERATOR..amount:sub(-(i - 1), -(i - 3))..newDisplay;
+	end
+	--Add everything before the first comma
+	newDisplay = amount:sub(1, (strlen % 3 == 0) and 3 or (strlen % 3))..newDisplay;
+	return newDisplay;
 end
 
-setfenv(1, tbl);
-----------------
+local function largeAmount(num)
+	return formatLargeNumber(math.floor(num / currencyMult));
+end
 
-Import("C_WowTokenSecure");
-Import("C_WowTokenPublic");
-Import("C_Timer");
-Import("C_PurchaseAPI");
+local function formatCurrency(dollars, cents, alwaysShowCents)
+	if ( alwaysShowCents or cents ~= 0 ) then
+		return string.format("%s%s%02d", formatLargeNumber(dollars), DECIMAL_SEPERATOR, cents);
+	else
+		return formatLargeNumber(dollars);
+	end
+end
 
-Import("math");
-Import("string");
-Import("pairs");
-Import("select");
-Import("unpack");
-Import("tostring");
-Import("tonumber");
-Import("date");
-Import("time");
-Import("type");
-Import("PlaySound");
-Import("GetCVar");
-Import("LOCALE_enGB");
-Import("TOKEN_REDEEM_LABEL"); 
-Import("TOKEN_REDEEM_GAME_TIME_TITLE"); 
-Import("TOKEN_REDEEM_GAME_TIME_DESCRIPTION"); 
-Import("TOKEN_REDEEM_GAME_TIME_EXPIRATION_FORMAT"); 
-Import("TOKEN_REDEEM_GAME_TIME_RENEWAL_FORMAT"); 
-Import("TOKEN_REDEEM_GAME_TIME_BUTTON_LABEL"); 
-Import("TOKEN_CONFIRMATION_TITLE"); 
-Import("TOKEN_COMPLETE_TITLE"); 
-Import("TOKEN_CREATE_AUCTION_TITLE"); 
-Import("TOKEN_BUYOUT_AUCTION_TITLE"); 
-Import("TOKEN_CONFIRM_CREATE_AUCTION");
-Import("TOKEN_CONFIRM_CREATE_AUCTION_LINE_2"); 
-Import("TOKEN_CONFIRM_GAME_TIME_DESCRIPTION");
-Import("TOKEN_CONFIRM_GAME_TIME_DESCRIPTION_MINUTES");
-Import("TOKEN_CONFIRM_GAME_TIME_EXPIRATION_CONFIRMATION_DESCRIPTION"); 
-Import("TOKEN_CONFIRM_GAME_TIME_RENEWAL_CONFIRMATION_DESCRIPTION"); 
-Import("TOKEN_COMPLETE_GAME_TIME_DESCRIPTION"); 
-Import("TOKEN_BUYOUT_AUCTION_CONFIRMATION_DESCRIPTION");
-Import("TOKEN_PRICE_LOCK_EXPIRE");
-Import("TOKEN_REDEEM_GAME_TIME_EXPIRATION_FORMAT_MINUTES");
-Import("TOKEN_COMPLETE_GAME_TIME_DESCRIPTION_MINUTES");
-Import("TOKEN_REDEEM_GAME_TIME_BUTTON_LABEL_MINUTES");
-Import("TOKEN_REDEEM_GAME_TIME_DESCRIPTION_MINUTES");
-Import("TOKEN_TRANSACTION_IN_PROGRESS");
-Import("TOKEN_YOU_WILL_BE_LOGGED_OUT");
-Import("TOKEN_REDEMPTION_UNAVAILABLE");
-Import("BLIZZARD_STORE_TRANSACTION_IN_PROGRESS");
+local function currencyFormatShort(dollars, cents)
+	return string.format(FormatCurrencyStringShort, formatCurrency(dollars, cents, false));
+end
 
-Import("GOLD_AMOUNT_SYMBOL");
-Import("GOLD_AMOUNT_TEXTURE");
-Import("GOLD_AMOUNT_TEXTURE_STRING");
-Import("SILVER_AMOUNT_SYMBOL");
-Import("SILVER_AMOUNT_TEXTURE");
-Import("SILVER_AMOUNT_TEXTURE_STRING");
-Import("COPPER_AMOUNT_SYMBOL");
-Import("COPPER_AMOUNT_TEXTURE");
-Import("COPPER_AMOUNT_TEXTURE_STRING");
-Import("SHORTDATE");
-Import("SHORTDATE_EU");
-Import("AUCTION_TIME_LEFT1_DETAIL");
-Import("AUCTION_TIME_LEFT2_DETAIL");
-Import("AUCTION_TIME_LEFT3_DETAIL");
-Import("AUCTION_TIME_LEFT4_DETAIL");
-Import("ACCEPT");
-Import("CANCEL");
-Import("OKAY");
-Import("LARGE_NUMBER_SEPERATOR");
-Import("DECIMAL_SEPERATOR");
-Import("CREATE_AUCTION");
-Import("WEEKS_ABBR");
-Import("DAYS_ABBR");
-Import("HOURS_ABBR");
-Import("MINUTES_ABBR");
+local function currencyFormatLong(dollars, cents)
+	return string.format(FormatCurrencyStringLong, formatCurrency(dollars, cents, false));
+end
 
-Import("LE_CONSUMABLE_TOKEN_REDEEM_FOR_SUB_AMOUNT_30_DAYS");
-Import("LE_CONSUMABLE_TOKEN_REDEEM_FOR_SUB_AMOUNT_2700_MINUTES");
-Import("LE_TOKEN_RESULT_SUCCESS");
-Import("LE_TOKEN_RESULT_ERROR_OTHER");
-Import("LE_TOKEN_RESULT_ERROR_DISABLED");
+local currencySpecific = {
+	[REGION_US] = {
+		["currencyFormat"] = currencyFormatShort,
+	},
+	[REGION_EU] = {
+		["currencyFormat"] = currencyFormatShort,
+	},
+	[REGION_KR] = {
+		["currencyFormat"] = currencyFormatLong,
+	},
+	[REGION_TW] = {
+		["currencyFormat"] = currencyFormatShort,
+	},
+	[REGION_CN] = {
+		["currencyFormat"] = currencyFormatLong,
+	},
+	[REGION_BETA] = {
+		["currencyFormat"] = currencyFormatShort,
+	}
+};
 
-RedeemIndex = nil;
+local function currencyInfo()
+	local currencyInfo = C_StoreSecure.GetCurrencyInfo();
+	FormatCurrencyStringShort = currencyInfo.sharedData.formatShort;
+	FormatCurrencyStringLong = currencyInfo.sharedData.formatLong;
+	
+	return currencySpecific[currencyInfo.sharedData.regionID];
+end
 
 function SecureFormatShortDate(day, month, year)
 	if (LOCALE_enGB) then
@@ -100,19 +84,97 @@ function SecureFormatShortDate(day, month, year)
 end
 
 function WowTokenRedemptionFrame_OnLoad(self)
-	RedeemIndex = select(3, C_WowTokenPublic.GetCommerceSystemStatus());
+	WowTokenRedemptionFrame_Update(self);
 	C_WowTokenSecure.CancelRedeem();
 	self:SetPoint("CENTER", UIParent, "CENTER", 0, 60);
 
-	self.portrait:Hide();
-	self.portraitFrame:Hide();
-	self.topLeftCorner:Show();
-	self.topBorderBar:SetPoint("TOPLEFT", self.topLeftCorner, "TOPRIGHT",  0, 0);
-	self.leftBorderBar:SetPoint("TOPLEFT", self.topLeftCorner, "BOTTOMLEFT",  0, 0);
-
 	self:RegisterEvent("TOKEN_REDEEM_FRAME_SHOW");
 	self:RegisterEvent("TOKEN_REDEEM_GAME_TIME_UPDATED");
+	self:RegisterEvent("TOKEN_REDEEM_BALANCE_UPDATED");
 	self:RegisterEvent("TOKEN_STATUS_CHANGED");
+end
+
+function GetBalanceString(amount)
+	local info = currencyInfo();
+	if info then
+		amount = amount or C_WowTokenSecure.GetBalanceRedeemAmount();
+		return info.currencyFormat(amount, 0);
+	end
+
+	return "";
+end
+
+local function CheckAwaitCurrencyIDBeforeUpdate(self)
+	local currencyID = C_StoreSecure.GetCurrencyID();
+	if currencyID == 0 and C_StoreSecure.GetLastProductListResponseError() == 0 then
+		-- If the error status is ok, but there's no currency, the currency id may not have been updated yet.
+		self:RegisterEvent("STORE_PRODUCTS_UPDATED");
+
+		-- Just in case this hasn't actually been requested yet or there was an error in an earlier response
+		-- make another attempt to force the currency update:
+		C_StoreSecure.GetProductList();
+		return true;
+	end
+
+	return false;
+end
+
+function WowTokenRedemptionFrame_Update(self)
+	BalanceEnabled = select(3, C_WowTokenPublic.GetCommerceSystemStatus());
+	if BalanceEnabled and not CheckAwaitCurrencyIDBeforeUpdate(self) then
+		C_WowTokenSecure.SetBalanceAmountString(GetBalanceString());
+		WowTokenRedemptionFrame_EnableBalance(self);
+		WowTokenRedemptionFrame_UpdateRedeemBalance(self);
+	else
+		self:SetWidth(325);
+		self.RightInset:Hide();
+		self.RightDisplay:Hide();
+	end
+end
+
+function WowTokenRedemptionFrame_UpdateRedeemBalance(self)
+	local currentBalance, _, canRedeem, cannotRedeemReason = C_WowTokenSecure.GetBalanceRedemptionInfo();
+	if (canRedeem) then
+		WowTokenRedemptionFrame_EnableBalance(self);
+		self.RightDisplay.Format:SetText(HTML_START_CENTERED..GetBalanceRedemptionString()..HTML_END);
+		self.RightDisplay.Spinner:Hide();
+		self.RightDisplay.Format:Show();
+		self.RightDisplay.RedeemButton:Enable();
+	else
+		WowTokenRedemptionFrame_DisableBalance(self);
+		-- Right now, near cap is the only reason the server will send us cannot accept here.
+		-- Have a good (but not perfect) default in case reasons are added before we patch the UI with a better message.
+		if (cannotRedeemReason == LE_TOKEN_RESULT_ERROR_BALANCE_NEAR_CAP) then
+			self.RightDisplay.Format:SetText(HTML_START_CENTERED..TOKEN_REDEEM_BALANCE_ERROR_CAP_FORMAT:format(GetBalanceString(currentBalance))..HTML_END);
+		else
+			self.RightDisplay.Format:SetText(HTML_START_CENTERED..TOKEN_REDEMPTION_UNAVAILABLE..HTML_END);
+		end
+		self.RightDisplay.Spinner:Hide();
+		self.RightDisplay.Format:Show();
+	end
+end
+
+function WowTokenRedemptionFrame_EnableBalance(self)
+	self:SetWidth(650);
+	self.RightInset:Show();
+	self.RightDisplay:Show();
+	self.RightDisplay.Title:SetFontObject("GameFontNormalHuge");
+	self.RightDisplay.Image:SetDesaturated(false);
+	self.RightDisplay.Image:SetAlpha(1);
+	self.RightDisplay.Description:SetFontObject("GameFontHighlight");
+	self.RightDisplay.Description:SetText(TOKEN_REDEEM_BALANCE_DESCRIPTION:format(GetBalanceString()));
+	self.RightDisplay.RedeemButton:Enable();
+end
+
+function WowTokenRedemptionFrame_DisableBalance(self)
+	self:SetWidth(650);
+	self.RightInset:Show();
+	self.RightDisplay:Show();
+	self.RightDisplay.Title:SetFontObject("GameFontDisableHuge");
+	self.RightDisplay.Image:SetDesaturated(true);
+	self.RightDisplay.Image:SetAlpha(.2);
+	self.RightDisplay.Description:SetFontObject("GameFontDisable");
+	self.RightDisplay.RedeemButton:Disable();
 end
 
 function GetTimeLeftMinuteString(minutes)
@@ -125,76 +187,99 @@ function GetTimeLeftMinuteString(minutes)
 		local wks = math.floor(minutes / weeks);
 
 		minutes = minutes - (wks * weeks);
-		str = str .. WEEKS_ABBR:format(wks);
+		str = str .. string.format(WEEKS_ABBR, wks);
 	end
 
 	if (math.floor(minutes / days) > 0) then
 		local dys = math.floor(minutes / days);
 
 		minutes = minutes - (dys * days);
-		str = str .. " " .. DAYS_ABBR:format(dys);
+		str = str .. " " .. string.format(DAYS_ABBR, dys);
 	end
 
 	if (math.floor(minutes / hours) > 0) then
 		local hrs = math.floor(minutes / hours);
 
 		minutes = minutes - (hrs * hours);
-		str = str .. " " .. HOURS_ABBR:format(hrs);
+		str = str .. " " .. string.format(HOURS_ABBR, hrs);
 	end
 
 	if (minutes > 0) then
-		str = str .. " " .. MINUTES_ABBR:format(minutes);
+		str = str .. " " .. string.format(MINUTES_ABBR, minutes);
 	end
 
 	return str;
 end
 
-function GetRedemptionString()
-	local isSub, remaining = C_WowTokenSecure.GetRedemptionInfo();
+function GetGameTimeRedemptionString()
+	local isSub, remaining = C_WowTokenSecure.GetGameTimeRedemptionInfo();
 
-	if (RedeemIndex == LE_CONSUMABLE_TOKEN_REDEEM_FOR_SUB_AMOUNT_30_DAYS) then
-		local now = time();
-		local oldTime = now + (remaining * 60); -- remaining is in minutes
-		local newTime = oldTime + (30 * 24 * 60 * 60); -- 30 days * 24 hours * 60 minutes * 60 seconds
+	local now = time();
+	local oldTime = now + (remaining * 60); -- remaining is in minutes
+	local newTime = oldTime + (30 * 24 * 60 * 60); -- 30 days * 24 hours * 60 minutes * 60 seconds
 
-		local oldDate = date("*t", oldTime);
-		local newDate = date("*t", newTime);
+	local oldDate = date("*t", oldTime);
+	local newDate = date("*t", newTime);
 
-		local str = isSub and TOKEN_REDEEM_GAME_TIME_RENEWAL_FORMAT or TOKEN_REDEEM_GAME_TIME_EXPIRATION_FORMAT;
+	local str = isSub and TOKEN_REDEEM_GAME_TIME_RENEWAL_FORMAT or TOKEN_REDEEM_GAME_TIME_EXPIRATION_FORMAT;
 
-		return str:format(SecureFormatShortDate(oldDate.day, oldDate.month, oldDate.year), SecureFormatShortDate(newDate.day, newDate.month, newDate.year))
-	elseif (RedeemIndex == LE_CONSUMABLE_TOKEN_REDEEM_FOR_SUB_AMOUNT_2700_MINUTES) then
-		return TOKEN_REDEEM_GAME_TIME_EXPIRATION_FORMAT_MINUTES:format(GetTimeLeftMinuteString(remaining), GetTimeLeftMinuteString(remaining + 2700));
-	end
+	return string.format(str, SecureFormatShortDate(oldDate.day, oldDate.month, oldDate.year), SecureFormatShortDate(newDate.day, newDate.month, newDate.year))
+end
+
+function GetBalanceRedemptionString()
+	local currentBalance, addedBalance, canRedeem = C_WowTokenSecure.GetBalanceRedemptionInfo();
+
+	local balanceStr = GetBalanceString(currentBalance);
+	local addedStr = GetBalanceString(currentBalance + addedBalance);
+
+	return TOKEN_REDEEM_BALANCE_FORMAT:format(balanceStr, addedStr);
+end
+
+function WowTokenRedemptionFrame_OnShow(self)
+	PlaySound(SOUNDKIT.IG_MAINMENU_OPEN);
+	CheckAwaitCurrencyIDBeforeUpdate(self);
+end
+
+function WowTokenRedemptionFrame_OnHide(self)
+	PlaySound(SOUNDKIT.IG_MAINMENU_CLOSE);
 end
 
 function WowTokenRedemptionFrame_OnEvent(self, event, ...)
 	if (event == "TOKEN_REDEEM_FRAME_SHOW") then
-		self.Display.RedeemButton:Disable();
+		self.LeftDisplay.RedeemButton:Disable();
+		self.RightDisplay.RedeemButton:Disable();
 		if (not C_WowTokenPublic.GetCommerceSystemStatus()) then
-			self.Display.Format:SetText(TOKEN_REDEMPTION_UNAVAILABLE);
-			self.Display.Spinner:Hide();
+			self.LeftDisplay.Format:SetText(TOKEN_REDEMPTION_UNAVAILABLE);
+			self.LeftDisplay.Spinner:Hide();
+			if (BalanceEnabled) then
+				self.RightDisplay.Format:SetText(TOKEN_REDEMPTION_UNAVAILABLE);
+				self.RightDisplay.Spinner:Hide();
+			end
 		else
 			C_WowTokenPublic.UpdateTokenCount();
 			C_WowTokenSecure.GetRemainingGameTime();
-			self.Display.Format:Hide();
-			self.Display.Spinner:Show();
+			self.LeftDisplay.Format:Hide();
+			self.LeftDisplay.Spinner:Show();
+			if (BalanceEnabled) then
+				C_WowTokenSecure.CanRedeemForBalance();
+				self.RightDisplay.Format:Hide();
+				self.RightDisplay.Spinner:Show();
+				self.RightDisplay.RedeemButton:SetText(TOKEN_REDEEM_BALANCE_BUTTON_LABEL:format(GetBalanceString()));
+			end
 		end
 		self:Show();
 	elseif (event == "TOKEN_REDEEM_GAME_TIME_UPDATED") then
-		if (RedeemIndex == LE_CONSUMABLE_TOKEN_REDEEM_FOR_SUB_AMOUNT_30_DAYS) then
-			self.Display.Description:SetText(TOKEN_REDEEM_GAME_TIME_DESCRIPTION);
-			self.Display.RedeemButton:SetText(TOKEN_REDEEM_GAME_TIME_BUTTON_LABEL);
-		elseif (RedeemIndex == LE_CONSUMABLE_TOKEN_REDEEM_FOR_SUB_AMOUNT_2700_MINUTES) then
-			self.Display.Description:SetText(TOKEN_REDEEM_GAME_TIME_DESCRIPTION_MINUTES);
-			self.Display.RedeemButton:SetText(TOKEN_REDEEM_GAME_TIME_BUTTON_LABEL_MINUTES);
-		end
-		self.Display.Format:SetText(GetRedemptionString());
-		self.Display.Spinner:Hide();
-		self.Display.Format:Show();
-		self.Display.RedeemButton:Enable();
+		self.LeftDisplay.Format:SetText(GetGameTimeRedemptionString());
+		self.LeftDisplay.Spinner:Hide();
+		self.LeftDisplay.Format:Show();
+		self.LeftDisplay.RedeemButton:Enable();
+	elseif (event == "TOKEN_REDEEM_BALANCE_UPDATED") then
+		WowTokenRedemptionFrame_UpdateRedeemBalance(self);
 	elseif (event == "TOKEN_STATUS_CHANGED") then
-		RedeemIndex = select(3, C_WowTokenPublic.GetCommerceSystemStatus());
+		WowTokenRedemptionFrame_Update(self);
+	elseif event == "STORE_PRODUCTS_UPDATED" then
+		self:UnregisterEvent("STORE_PRODUCTS_UPDATED");
+		WowTokenRedemptionFrame_Update(self);
 	end
 end
 
@@ -210,33 +295,31 @@ function WowTokenRedemptionFrame_OnAttributeChanged(self, name, value)
 			end
 			self:SetAttribute("escaperesult", handled);
 		end
+	elseif ( name == "getbalancestring" ) then
+		self:SetAttribute("balancestring", GetBalanceString());
+	elseif ( name == "showdialog" ) then
+		local dialogName, dialogData = securecallfunction(unpack, value);
+		WowTokenDialog_SetDialog(WowTokenDialog, dialogName, dialogData);
 	end
 end
 
 function WowTokenRedemptionRedeemButton_OnClick(self)
 	WowTokenRedemptionFrame:Hide();
-	C_WowTokenSecure.RedeemToken();
-	WowTokenDialog_SetDialog(WowTokenDialog, "WOW_TOKEN_REDEEM_CONFIRMATION");
-	PlaySound("igMainMenuOpen");
+	local type = LE_TOKEN_REDEEM_TYPE_GAME_TIME;
+	local dialogKey = "WOW_TOKEN_REDEEM_CONFIRMATION_SUB";
+	if (self:GetID() == 2) then
+		type = LE_TOKEN_REDEEM_TYPE_BALANCE;
+		dialogKey = "WOW_TOKEN_REDEEM_CONFIRMATION_BALANCE";
+	end
+	C_WowTokenSecure.RedeemToken(type);
+	WowTokenDialog_SetDialog(WowTokenDialog, dialogKey);
+	PlaySound(SOUNDKIT.IG_MAINMENU_OPEN);
 end
 
 function WowTokenRedemptionFrameCloseButton_OnClick(self)
 	C_WowTokenSecure.CancelRedeem();
 	WowTokenRedemptionFrame:Hide();
-	PlaySound("igMainMenuClose");
-end
-
-local function formatLargeNumber(amount)
-	amount = tostring(amount);
-	local newDisplay = "";
-	local strlen = amount:len();
-	--Add each thing behind a comma
-	for i=4, strlen, 3 do
-		newDisplay = LARGE_NUMBER_SEPERATOR..amount:sub(-(i - 1), -(i - 3))..newDisplay;
-	end
-	--Add everything before the first comma
-	newDisplay = amount:sub(1, (strlen % 3 == 0) and 3 or (strlen % 3))..newDisplay;
-	return newDisplay;
+	PlaySound(SOUNDKIT.IG_MAINMENU_CLOSE);
 end
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -264,14 +347,14 @@ function GetSecureMoneyString(money, separateThousands)
 		copperString = copper..COPPER_AMOUNT_SYMBOL;
 	else
 		if (separateThousands) then
-			goldString = GOLD_AMOUNT_TEXTURE_STRING:format(formatLargeNumber(gold), 0, 0);
+			goldString = string.format(GOLD_AMOUNT_TEXTURE_STRING, formatLargeNumber(gold), 0, 0);
 		else
-			goldString = GOLD_AMOUNT_TEXTURE:format(gold, 0, 0);
+			goldString = string.format(GOLD_AMOUNT_TEXTURE, gold, 0, 0);
 		end
-		silverString = SILVER_AMOUNT_TEXTURE:format(silver, 0, 0);
-		copperString = COPPER_AMOUNT_TEXTURE:format(copper, 0, 0);
+		silverString = string.format(SILVER_AMOUNT_TEXTURE, silver, 0, 0);
+		copperString = string.format(COPPER_AMOUNT_TEXTURE, copper, 0, 0);
 	end
-	
+
 	local moneyString = "";
 	local separator = "";
 	if ( gold > 0 ) then
@@ -285,45 +368,9 @@ function GetSecureMoneyString(money, separateThousands)
 	if ( copper > 0 or moneyString == "" ) then
 		moneyString = moneyString..separator..copperString;
 	end
-	
+
 	return moneyString;
 end
-
-------------------------------------------------------------------------------------------------------------------------------------------------------
-
-------------------------------------------------------------------------------------------------------------------------------------------------------
--- This code is replicated from C_TimerAugment.lua to ensure that the timers are secure.
-------------------------------------------------------------------------------------------------------------------------------------------------------
---Cancels a ticker or timer. May be safely called within the ticker's callback in which
---case the ticker simply won't be started again.
---Cancel is guaranteed to be idempotent.
-function SecureCancelTicker(ticker)
-	ticker._cancelled = true;
-end
-
-function NewSecureTicker(duration, callback, iterations)
-	local ticker = {};
-	ticker._remainingIterations = iterations;
-	ticker._callback = function()
-		if ( not ticker._cancelled ) then
-			callback(ticker);
-
-			--Make sure we weren't cancelled during the callback
-			if ( not ticker._cancelled ) then
-				if ( ticker._remainingIterations ) then
-					ticker._remainingIterations = ticker._remainingIterations - 1;
-				end
-				if ( not ticker._remainingIterations or ticker._remainingIterations > 0 ) then
-					C_Timer.After(duration, ticker._callback);
-				end
-			end
-		end
-	end;
-
-	C_Timer.After(duration, ticker._callback);
-	return ticker;
-end
------------------------------------------------------------------------------------------------------------------------------------------------------
 
 function GetTimeLeftString()
 	local _, duration = C_WowTokenPublic.GetCurrentMarketPrice();
@@ -344,11 +391,11 @@ end
 local currentDialog, currentDialogName, currentTicker, remainingDialogTime;
 local dialogs;
 dialogs = {
-	["WOW_TOKEN_REDEEM_CONFIRMATION"] = {
+	["WOW_TOKEN_REDEEM_CONFIRMATION_SUB"] = {
 		completionIcon = false,
 		cautionIcon = true,
 		title = TOKEN_CONFIRMATION_TITLE,
-		description = { [LE_CONSUMABLE_TOKEN_REDEEM_FOR_SUB_AMOUNT_30_DAYS] = TOKEN_CONFIRM_GAME_TIME_DESCRIPTION, [LE_CONSUMABLE_TOKEN_REDEEM_FOR_SUB_AMOUNT_2700_MINUTES] = TOKEN_CONFIRM_GAME_TIME_DESCRIPTION_MINUTES },
+		description = TOKEN_CONFIRM_GAME_TIME_DESCRIPTION,
 		confirmationDesc = nil, -- Now set in reaction to an event
 		additionalConfirmationDescription = function()
 			if (C_WowTokenSecure.WillKickFromWorld()) then
@@ -359,40 +406,82 @@ dialogs = {
 		end,
 		confDescIsFunction = true,
 		button1 = ACCEPT,
-		button1OnClick = function(self) 
-			self:Hide(); 
-			if (C_WowTokenSecure.GetTokenCount() > 0) then 
-				C_WowTokenSecure.RedeemTokenConfirm(); 
-				WowTokenDialog_SetDialog(WowTokenDialog, "WOW_TOKEN_REDEEM_IN_PROGRESS"); 
+		button1OnClick = function(self)
+			self:Hide();
+			if (C_WowTokenSecure.GetTokenCount() > 0) then
+				C_WowTokenSecure.RedeemTokenConfirm(LE_TOKEN_REDEEM_TYPE_GAME_TIME);
+				WowTokenDialog_SetDialog(WowTokenDialog, "WOW_TOKEN_REDEEM_IN_PROGRESS");
 			else
-				Outbound.RedeemFailed(LE_TOKEN_RESULT_ERROR_OTHER);
+				WowTokenOutbound.RedeemFailed(LE_TOKEN_RESULT_ERROR_OTHER);
 			end
-			PlaySound("igMainMenuClose"); 
+			PlaySound(SOUNDKIT.IG_MAINMENU_CLOSE);
 		end,
 		button2 = CANCEL,
-		button2OnClick = function(self) self:Hide(); C_WowTokenSecure.CancelRedeem(); PlaySound("igMainMenuClose"); end,
+		button2OnClick = function(self) self:Hide(); C_WowTokenSecure.CancelRedeem(); PlaySound(SOUNDKIT.IG_MAINMENU_CLOSE); end,
+		validate = function() return C_WowTokenSecure.IsRedemptionStillValid(); end,
 		onHide = function(self)
-			dialogs["WOW_TOKEN_REDEEM_CONFIRMATION"].spinner = true;
-			dialogs["WOW_TOKEN_REDEEM_CONFIRMATION"].confirmationDesc = nil;
+			dialogs["WOW_TOKEN_REDEEM_CONFIRMATION_SUB"].spinner = true;
+			dialogs["WOW_TOKEN_REDEEM_CONFIRMATION_SUB"].confirmationDesc = nil;
 		end,
 		spinner = true,
 		point = { "CENTER", UIParent, "CENTER", 0, 240 },
 	};
-	["WOW_TOKEN_REDEEM_COMPLETION"] = {
+	["WOW_TOKEN_REDEEM_COMPLETION_SUB"] = {
 		completionIcon = true,
 		cautionIcon = false,
 		title = TOKEN_COMPLETE_TITLE,
-		description = { [LE_CONSUMABLE_TOKEN_REDEEM_FOR_SUB_AMOUNT_30_DAYS] = TOKEN_COMPLETE_GAME_TIME_DESCRIPTION, [LE_CONSUMABLE_TOKEN_REDEEM_FOR_SUB_AMOUNT_2700_MINUTES] = TOKEN_COMPLETE_GAME_TIME_DESCRIPTION_MINUTES },
+		description = TOKEN_COMPLETE_GAME_TIME_DESCRIPTION,
 		button1 = OKAY,
-		button1OnClick = function(self) self:Hide(); PlaySound("igMainMenuClose"); end,
+		button1OnClick = function(self) self:Hide(); PlaySound(SOUNDKIT.IG_MAINMENU_CLOSE); end,
 		point = { "CENTER", UIParent, "CENTER", 0, 240 },
 	};
-	["WOW_TOKEN_REDEEM_COMPLETION_KICK"] = {
+	["WOW_TOKEN_REDEEM_COMPLETION_KICK_SUB"] = {
 		title = BLIZZARD_STORE_TRANSACTION_IN_PROGRESS,
-		description = { [LE_CONSUMABLE_TOKEN_REDEEM_FOR_SUB_AMOUNT_30_DAYS] = TOKEN_COMPLETE_GAME_TIME_DESCRIPTION, [LE_CONSUMABLE_TOKEN_REDEEM_FOR_SUB_AMOUNT_2700_MINUTES] = TOKEN_COMPLETE_GAME_TIME_DESCRIPTION_MINUTES },
+		description = TOKEN_COMPLETE_GAME_TIME_DESCRIPTION,
 		confirmationDesc = TOKEN_YOU_WILL_BE_LOGGED_OUT,
 		button1 = OKAY,
-		button1OnClick = function(self) self:Hide(); PlaySound("igMainMenuClose"); end,
+		button1OnClick = function(self) self:Hide(); PlaySound(SOUNDKIT.IG_MAINMENU_CLOSE); end,
+		point = { "CENTER", UIParent, "CENTER", 0, 240 },
+	};
+	["WOW_TOKEN_REDEEM_CONFIRMATION_BALANCE"] = {
+		completionIcon = false,
+		cautionIcon = true,
+		title = TOKEN_CONFIRMATION_TITLE,
+		description = TOKEN_REDEEM_BALANCE_CONFIRMATION_DESCRIPTION,
+		formatDesc = true,
+		descFormatArgs = function() return { GetBalanceString(); }; end,
+		confirmationDesc = nil, -- Now set in reaction to an event
+		confDescIsFunction = true,
+		button1 = ACCEPT,
+		validate = function() return C_WowTokenSecure.IsRedemptionStillValid(); end,
+		button1OnClick = function(self)
+			self:Hide();
+			if (C_WowTokenSecure.GetTokenCount() > 0) then
+				C_WowTokenSecure.RedeemTokenConfirm(LE_TOKEN_REDEEM_TYPE_BALANCE);
+				WowTokenDialog_SetDialog(WowTokenDialog, "WOW_TOKEN_REDEEM_IN_PROGRESS");
+			else
+				WowTokenOutbound.RedeemFailed(LE_TOKEN_RESULT_ERROR_OTHER);
+			end
+			PlaySound(SOUNDKIT.IG_MAINMENU_CLOSE);
+		end,
+		button2 = CANCEL,
+		button2OnClick = function(self) self:Hide(); C_WowTokenSecure.CancelRedeem(); PlaySound(SOUNDKIT.IG_MAINMENU_CLOSE); end,
+		onHide = function(self)
+			dialogs["WOW_TOKEN_REDEEM_CONFIRMATION_BALANCE"].spinner = true;
+			dialogs["WOW_TOKEN_REDEEM_CONFIRMATION_BALANCE"].confirmationDesc = nil;
+		end,
+		spinner = true,
+		point = { "CENTER", UIParent, "CENTER", 0, 240 },
+	};
+	["WOW_TOKEN_REDEEM_COMPLETION_BALANCE"] = {
+		completionIcon = true,
+		cautionIcon = false,
+		title = TOKEN_COMPLETE_TITLE,
+		description = TOKEN_COMPLETE_BALANCE_DESCRIPTION,
+		formatDesc = true,
+		descFormatArgs = function() return { GetBalanceString() }; end,
+		button1 = OKAY,
+		button1OnClick = function(self) self:Hide(); PlaySound(SOUNDKIT.IG_MAINMENU_CLOSE); end,
 		point = { "CENTER", UIParent, "CENTER", 0, 240 },
 	};
 	["WOW_TOKEN_CREATE_AUCTION"] = {
@@ -400,22 +489,22 @@ dialogs = {
 		cautionIcon = true,
 		title = TOKEN_CREATE_AUCTION_TITLE,
 		confirmationDesc = TOKEN_CONFIRM_CREATE_AUCTION,
-		confirmationDescLine2 = function() return TOKEN_CONFIRM_CREATE_AUCTION_LINE_2:format(GetTimeLeftString()) end,
+		confirmationDescLine2 = function() return string.format(TOKEN_CONFIRM_CREATE_AUCTION_LINE_2, GetTimeLeftString()) end,
 		price = function() return GetSecureMoneyString(C_WowTokenPublic.GetGuaranteedPrice()); end,
 		button1 = CREATE_AUCTION,
-		button1OnClick = function(self) C_WowTokenSecure.ConfirmSellToken(true); self:Hide(); PlaySound("LOOTWINDOWCOINSOUND"); end,
+		button1OnClick = function(self) C_WowTokenSecure.ConfirmSellToken(true); self:Hide(); PlaySound(SOUNDKIT.LOOT_WINDOW_COIN_SOUND); end,
 		button2 = CANCEL,
-		button2OnClick = function(self) C_WowTokenSecure.ConfirmSellToken(false); self:Hide(); PlaySound("igMainMenuClose"); end,
+		button2OnClick = function(self) C_WowTokenSecure.ConfirmSellToken(false); self:Hide(); PlaySound(SOUNDKIT.IG_MAINMENU_CLOSE); end,
 		onShow = function(self)
 			self:SetAttribute("isauctiondialogshown", true);
 		end,
 		onHide = function(self)
 			self:SetAttribute("isauctiondialogshown", false);
-			Outbound.AuctionWowTokenUpdate();
+			WowTokenOutbound.AuctionWowTokenUpdate();
 		end,
 		onCancelled = function(self)
 			C_WowTokenSecure.ConfirmSellToken(false);
-			PlaySound("igMainMenuClose");
+			PlaySound(SOUNDKIT.IG_MAINMENU_CLOSE);
 		end,
 		timed = true,
 		showCautionText = 20,
@@ -435,14 +524,14 @@ dialogs = {
 		end,
 		onHide = function(self)
 			self:SetAttribute("isauctiondialogshown", false);
-			Outbound.AuctionWowTokenUpdate();
+			WowTokenOutbound.AuctionWowTokenUpdate();
 			self.Title:SetFontObject("GameFontNormalLarge");
 			self.ConfirmationDesc:SetFontObject("GameFontNormal");
 		end,
 		button1 = ACCEPT,
-		button1OnClick = function(self) C_WowTokenSecure.ConfirmBuyToken(true); self:Hide(); PlaySound("igMainMenuClose"); end,
+		button1OnClick = function(self) C_WowTokenSecure.ConfirmBuyToken(true); self:Hide(); PlaySound(SOUNDKIT.IG_MAINMENU_CLOSE); end,
 		button2 = CANCEL,
-		button2OnClick = function(self) C_WowTokenSecure.ConfirmBuyToken(false); self:Hide(); PlaySound("igMainMenuClose"); end,
+		button2OnClick = function(self) C_WowTokenSecure.ConfirmBuyToken(false); self:Hide(); PlaySound(SOUNDKIT.IG_MAINMENU_CLOSE); end,
 		timed = true,
 		showCautionText = 20,
 		spacing = 6,
@@ -456,9 +545,37 @@ dialogs = {
 		noButtons = true,
 		point = { "CENTER", UIParent, "CENTER", 0, 240 },
 	};
+	["RAF_GAME_TIME_REDEEM_CONFIRMATION_SUB"] = {
+		completionIcon = false,
+		cautionIcon = true,
+		title = TOKEN_CONFIRMATION_TITLE,
+		description = TOKEN_CONFIRM_GAME_TIME_DESCRIPTION,
+		confirmationDesc = GetGameTimeRedemptionString,
+		confDescIsFunction = true,
+		button1 = ACCEPT,
+		button1OnClick = function(self)
+			self:Hide();
+			local rafVersion = self.dialogData;
+			if rafVersion and C_RecruitAFriend.ClaimNextReward(rafVersion) then
+				WowTokenOutbound.RecruitAFriendTryPlayClaimRewardFanfare(rafVersion);
+			else
+				WowTokenOutbound.RecruitAFriendTryCancelAutoClaim();
+			end
+			PlaySound(SOUNDKIT.IG_MAINMENU_CLOSE);
+		end,
+		button2 = CANCEL,
+		button2OnClick = function(self)
+			WowTokenOutbound.RecruitAFriendTryCancelAutoClaim();
+			self:Hide();
+			PlaySound(SOUNDKIT.IG_MAINMENU_CLOSE);
+		end,
+		onHide = function(self)
+		end,
+		point = { "CENTER", UIParent, "CENTER", 0, 240 },
+	};
 };
 
-function WowTokenDialog_SetDialog(self, dialogName)
+function WowTokenDialog_SetDialog(self, dialogName, dialogData)
 	local dialog = dialogs[dialogName];
 	if (not dialog) then
 		return;
@@ -485,6 +602,8 @@ function WowTokenDialog_SetDialog(self, dialogName)
 
 	local descArgs = nil;
 	local confDescArgs = nil;
+
+	self.dialogData = dialogData;
 
 	if (dialog.descFormatArgs) then
 		descArgs = dialog.descFormatArgs();
@@ -532,23 +651,17 @@ function WowTokenDialog_SetDialog(self, dialogName)
 		self.Description:SetWidth(0);
 		local description;
 		if (dialog.formatDesc) then
-			description = dialog.description:format(unpack(descArgs));
-		elseif (type(dialog.description) == "table") then
-			description = dialog.description[RedeemIndex];
+			description = string.format(dialog.description, unpack(descArgs));
 		else
 			description = dialog.description;
 		end
 		if (dialog.additionalDescription) then
 			description = description .. dialog.additionalDescription();
-		end	
+		end
 		self.Description:SetText(description);
 		self.Description:SetWidth(min(maxStringWidth, self.Description:GetWidth()));
 		height = height + spacing + self.Description:GetHeight();
 		width = max(width, self.Description:GetWidth());
-	elseif (dialog.confirmationDesc) then
-		self.Description:Hide();
-		self.ConfirmationDesc:ClearAllPoints();
-		self.ConfirmationDesc:SetPoint("TOP", self.Title, "BOTTOM", 0, -spacing);
 	else
 		self.Description:Hide();
 	end
@@ -559,13 +672,13 @@ function WowTokenDialog_SetDialog(self, dialogName)
 		if (dialog.confDescIsFunction) then
 			confirmationDesc = dialog.confirmationDesc();
 		elseif (dialog.formatConfirmationDesc) then
-			confirmationDesc = dialog.confirmationDesc:format(unpack(confDescArgs));
+			confirmationDesc = string.format(dialog.confirmationDesc, unpack(confDescArgs));
 		else
 			confirmationDesc = dialog.confirmationDesc;
 		end
 		if (dialog.additionalConfirmationDescription) then
 			confirmationDesc = confirmationDesc .. dialog.additionalConfirmationDescription();
-		end	
+		end
 		self.ConfirmationDesc:SetText(confirmationDesc);
 		self.ConfirmationDesc:SetWidth(min(maxStringWidth, self.ConfirmationDesc:GetWidth()));
 		self.ConfirmationDesc:Show();
@@ -575,7 +688,7 @@ function WowTokenDialog_SetDialog(self, dialogName)
 		if (dialog.price) then
 			self.PriceLabel:SetWidth(0);
 			self.ConfirmationDescLine2:ClearAllPoints();
-			self.ConfirmationDescLine2:SetPoint("TOP", target, "BOTTOM", 0, -40 + self.ConfirmationDesc:GetHeight());
+			self.ConfirmationDescLine2:SetPoint("TOP", target, "BOTTOM", 0, -20 - self.ConfirmationDesc:GetHeight());
 			if (type(dialog.price) == "function") then
 				self.PriceLabel:SetText(dialog.price());
 			else
@@ -620,13 +733,15 @@ function WowTokenDialog_SetDialog(self, dialogName)
 		self.Spinner:Show();
 		self.Spinner:ClearAllPoints();
 		if (dialog.noButtons) then
-			self.Spinner:SetPoint("BOTTOM", 0, 16);
+			self.Spinner:SetPoint("BOTTOM", 0, 20);
 		else
-			self.Spinner:SetPoint("BOTTOM", 0, 32);
+			self.Spinner:SetPoint("BOTTOM", 0, 45);
 			height = height + 16;
 		end
+		self.Button1:Disable();
 	else
 		self.Spinner:Hide();
+		self.Button1:Enable();
 	end
 
 	if (dialog.noButtons) then
@@ -663,16 +778,16 @@ function WowTokenDialog_SetDialog(self, dialogName)
 	if (dialog.timed) then
 		remainingDialogTime = C_WowTokenSecure.GetPriceLockDuration();
 		if (not currentTicker) then
-			currentTicker = NewSecureTicker(1, function()
+			currentTicker = C_Timer.NewTicker(1, function()
 				if (remainingDialogTime == 0) then
-					SecureCancelTicker(currentTicker);
+					currentTicker:Cancel();
 					if (dialog.onCancelled) then
 						dialog.onCancelled(WowTokenDialog);
 					end
 					currentTicker = nil;
 					self:Hide();
 				elseif (remainingDialogTime <= (dialog.showCautionText and dialog.showCautionText or 20)) then
-					self.CautionText:SetText(TOKEN_PRICE_LOCK_EXPIRE:format(remainingDialogTime));
+					self.CautionText:SetText(string.format(TOKEN_PRICE_LOCK_EXPIRE, remainingDialogTime));
 					self.CautionText:Show();
 					local newHeight = height + self.CautionText:GetHeight() + 20;
 					if (dialog.button2) then
@@ -703,7 +818,7 @@ function WowTokenDialog_SetDialog(self, dialogName)
 		end
 	else
 		if (currentTicker) then
-			SecureCancelTicker(currentTicker);
+			currentTicker:Cancel();
 			currentTicker = nil;
 		end
 	end
@@ -754,29 +869,49 @@ end
 function WowTokenDialog_OnEvent(self, event, ...)
 	if (event == "TOKEN_SELL_CONFIRM_REQUIRED") then
 		WowTokenDialog_SetDialog(self, "WOW_TOKEN_CREATE_AUCTION");
-		Outbound.AuctionWowTokenUpdate();
+		WowTokenOutbound.AuctionWowTokenUpdate();
 	elseif (event == "TOKEN_BUY_CONFIRM_REQUIRED") then
 		WowTokenDialog_SetDialog(self, "WOW_TOKEN_BUYOUT_AUCTION");
-		Outbound.AuctionWowTokenUpdate();
+		WowTokenOutbound.AuctionWowTokenUpdate();
 	elseif (event == "TOKEN_REDEEM_CONFIRM_REQUIRED") then
-		if (currentDialogName ~= "WOW_TOKEN_REDEEM_CONFIRMATION") then
+		local choice = ...;
+		local dialogKey, confirmationDescFunc;
+		if (choice == LE_TOKEN_REDEEM_TYPE_GAME_TIME) then
+			dialogKey = "WOW_TOKEN_REDEEM_CONFIRMATION_SUB";
+			confirmationDescFunc = GetGameTimeRedemptionString;
+		elseif (choice == LE_TOKEN_REDEEM_TYPE_BALANCE) then
+			dialogKey = "WOW_TOKEN_REDEEM_CONFIRMATION_BALANCE";
+			confirmationDescFunc = GetBalanceRedemptionString;
+		end
+
+		if (not dialogKey or currentDialogName ~= dialogKey) then
 			return;
 		end
 		self:Hide();
-		dialogs["WOW_TOKEN_REDEEM_CONFIRMATION"].spinner = false;
-		dialogs["WOW_TOKEN_REDEEM_CONFIRMATION"].confirmationDesc = GetRedemptionString;
-		WowTokenDialog_SetDialog(self, "WOW_TOKEN_REDEEM_CONFIRMATION");
+		dialogs[dialogKey].spinner = false;
+		dialogs[dialogKey].confirmationDesc = confirmationDescFunc;
+		WowTokenDialog_SetDialog(self, dialogKey);
 	elseif (event == "TOKEN_REDEEM_RESULT") then
-		local result = ...;
+		local result, choice = ...;
 		if (result == LE_TOKEN_RESULT_SUCCESS) then
-			if (C_WowTokenSecure.WillKickFromWorld()) then
-				WowTokenDialog_SetDialog(self, "WOW_TOKEN_REDEEM_COMPLETION_KICK");
-			else
-				WowTokenDialog_SetDialog(self, "WOW_TOKEN_REDEEM_COMPLETION");
+			local dialogKey;
+			if (choice == LE_TOKEN_REDEEM_TYPE_GAME_TIME) then
+				if (C_WowTokenSecure.WillKickFromWorld()) then
+					dialogKey = "WOW_TOKEN_REDEEM_COMPLETION_KICK_SUB";
+				else
+					dialogKey = "WOW_TOKEN_REDEEM_COMPLETION_SUB";
+				end
+			elseif (choice == LE_TOKEN_REDEEM_TYPE_BALANCE) then
+				dialogKey = "WOW_TOKEN_REDEEM_COMPLETION_BALANCE";
 			end
+			if (not dialogKey) then
+				return;
+			end
+			WowTokenDialog_SetDialog(self, dialogKey);
 		else
-			Outbound.RedeemFailed(result);
+			WowTokenOutbound.RedeemFailed(result);
 			C_WowTokenSecure.CancelRedeem();
+			self:Hide();
 		end
 	elseif (event == "AUCTION_HOUSE_CLOSED") then
 		WowTokenDialog_HideDialog("WOW_TOKEN_CREATE_AUCTION");
@@ -803,7 +938,7 @@ function WowTokenDialogButton_OnClick(self)
 	end
 
 	if (currentTicker) then
-		SecureCancelTicker(currentTicker);
+		currentTicker:Cancel();
 		currentTicker = nil;
 	end
 end

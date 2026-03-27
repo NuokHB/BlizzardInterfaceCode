@@ -1,5 +1,5 @@
-## Interface: 70000
 ## Title: Blizzard Auth Challenge UI
-## Secure: 1
-## LoadOnDemand: 0
+## RequiredDep: Blizzard_SharedXML
+## UseSecureEnvironment: 1
+## AllowLoad: Both
 Blizzard_AuthChallengeUI.xml

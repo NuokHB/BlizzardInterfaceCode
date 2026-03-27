@@ -1,5 +1,5 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/
-..\..\FrameXML\UI.xsd">
+..\..\..\..\..\WoW\Data\Interface\AddOns\Blizzard_SharedXML\UI.xsd">
 	<Script file="Blizzard_ArtifactAppearances.lua"/>
 
 	<Frame name="ArtifactAppearanceSetTemplate" virtual="true">
@@ -33,7 +33,7 @@
 					<OnEnter>
 						if self.tooltip then
 							GameTooltip:SetOwner(self, "ANCHOR_RIGHT", 0, 0);
-							GameTooltip:SetText(self.tooltip , 1, 1, 1, true);
+							GameTooltip_SetTitle(GameTooltip, self.tooltip);
 						end
 					</OnEnter>
 					<OnLeave function="GameTooltip_Hide" />
@@ -75,6 +75,12 @@
 			</Layer>
 			<Layer level="OVERLAY" textureSubLevel="1">
 				<Texture parentKey="Selected" atlas="Forge-ColorSwatchSelection" useAtlasSize="true">
+					<Anchors>
+						<Anchor point="CENTER"/>
+					</Anchors>
+				</Texture>
+				<Texture parentKey="UnobtainableCover" atlas="Forge-UnobtainableCover" hidden="true">
+					<Size x="55" y="55"/>
 					<Anchors>
 						<Anchor point="CENTER"/>
 					</Anchors>

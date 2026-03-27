@@ -15,7 +15,7 @@ function AdventureMap_QuestOfferDataProviderMixin:OnEvent(event, ...)
 		self:RefreshAllData();
 	elseif event == "QUEST_ACCEPTED" then
 		if self:GetMap():IsVisible() then
-			local questIndex, questID = ...;
+			local questID = ...;
 			for pin in self:GetMap():EnumeratePinsByTemplate("AdventureMap_QuestOfferPinTemplate") do
 				if pin.questID == questID then
 					self:OnQuestAccepted(pin);
@@ -45,7 +45,7 @@ function AdventureMap_QuestOfferDataProviderMixin:RefreshAllData(fromOnShow)
 	local mapAreaID = self:GetMap():GetMapID();
 	for offerIndex = 1, C_AdventureMap.GetNumQuestOffers() do
 		local questID, isTrivial, frequency, isLegendary, title, description, normalizedX, normalizedY, insetIndex = C_AdventureMap.GetQuestOfferInfo(offerIndex);
-		if AdventureMap_IsQuestValid(mapAreaID, questID, normalizedX, normalizedY) and not AdventureMap_IsPositionBlockedByZoneChoice(mapAreaID, normalizedX, normalizedY, insetIndex) then
+		if AdventureMap_IsQuestValid(questID, normalizedX, normalizedY) and not AdventureMap_IsPositionBlockedByZoneChoice(mapAreaID, normalizedX, normalizedY, insetIndex) then
 			self:AddQuest(questID, isTrivial, frequency, isLegendary, title, description, normalizedX, normalizedY, insetIndex);
 		end
 	end
@@ -53,8 +53,9 @@ function AdventureMap_QuestOfferDataProviderMixin:RefreshAllData(fromOnShow)
 	self.playRevealAnims = false;
 end
 
-local function DetermineAtlas(isTrivial, frequency, isLegendary)
-	if frequency == LE_QUEST_FREQUENCY_DAILY or frequency == LE_QUEST_FREQUENCY_WEEKLY then
+local function DetermineAtlas(questID)
+	local classification = C_QuestInfoSystem.GetQuestClassification(questID);
+	if classification == Enum.QuestClassification.Recurring then
 		return "AdventureMapIcon-DailyQuest";
 	end
 
@@ -69,12 +70,11 @@ function AdventureMap_QuestOfferDataProviderMixin:AddQuest(questID, isTrivial, f
 	pin.title = title;
 	pin.description = description;
 
-	local iconAtlas = DetermineAtlas(isTrivial, frequency, isLegendary);
+	local iconAtlas = DetermineAtlas(questID);
 	pin.Icon:SetAtlas(iconAtlas, true);
 	pin.IconHighlight:SetAtlas(iconAtlas, true);
 
 	pin:SetPosition(normalizedX, normalizedY, insetIndex);
-	pin:Show();
 end
 
 function AdventureMap_QuestOfferDataProviderMixin:OnQuestAccepted(pin)
@@ -98,11 +98,26 @@ function AdventureMap_QuestOfferDataProviderMixin:OnQuestOfferPinClicked(pin)
 		self:GetMap():ReleaseAreaTriggers("AdventureMap_QuestOffer");
 
 		self.offerAreaTrigger = nil;
-		self.currentOfferPin = nil;
+		if pin == self.currentOfferPin then
+			self.currentOfferPin = nil;
+			self:GetMap():ZoomOut();
+		end
 	end
 
+	if self.currentOfferPin then
+		pin:PanTo();
+	else
+		pin:PanAndZoomTo();
+	end
+	self.currentOfferPin = pin;
+
 	AdventureMapQuestChoiceDialog:ShowWithQuest(self:GetMap(), pin, pin.questID, OnClosedCallback, 0);
-	AdventureMapQuestChoiceDialog:SetPortraitAtlas("FXAM-QuestBang", nil, nil, 0, 7);
+	local textureKit = C_AdventureMap.GetAdventureMapTextureKit();
+	if textureKit == "midnight" then
+		AdventureMapQuestChoiceDialog:SetPortraitAtlas("ui-prey-scoutingmap", nil, nil, 0, 23);
+	else
+		AdventureMapQuestChoiceDialog:SetPortraitAtlas("FXAM-QuestBang", nil, nil, 0, 7);
+	end
 
 	if not self.offerAreaTrigger then
 		self.offerAreaTrigger = self:GetMap():AcquireAreaTrigger("AdventureMap_QuestOffer");
@@ -116,8 +131,6 @@ function AdventureMap_QuestOfferDataProviderMixin:OnQuestOfferPinClicked(pin)
 	self.offerAreaTrigger:Stretch(.1, .1);
 
 	self.offerAreaTrigger.pin = pin;
-
-	self.currentOfferPin = pin;
 end
 
 function AdventureMap_QuestOfferDataProviderMixin:OnCanvasScaleChanged()
@@ -131,8 +144,7 @@ end
 AdventureMap_QuestOfferPinMixin = CreateFromMixins(MapCanvasPinMixin);
 
 function AdventureMap_QuestOfferPinMixin:OnLoad()
-	self:SetAlphaStyle(AM_PIN_ALPHA_STYLE_VISIBLE_WHEN_ZOOMED_IN);
-	self:SetScalingLimits(1.25, 3.0, 1.5);
+	self:SetScalingLimits(1.25, 0.825, 1.275);
 end
 
 function AdventureMap_QuestOfferPinMixin:OnAcquired(playAnim)
@@ -143,7 +155,7 @@ end
 
 function AdventureMap_QuestOfferPinMixin:OnClick(button)
 	if button == "LeftButton" then
-		self:PanAndZoomTo();
+		PlaySound(SOUNDKIT.IG_QUEST_LOG_OPEN);
 		self.dataProvider:OnQuestOfferPinClicked(self);
 	end
 end

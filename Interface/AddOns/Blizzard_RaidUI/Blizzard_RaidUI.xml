@@ -1,5 +1,5 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/
-..\..\FrameXML\UI.xsd">
+..\..\..\..\..\WoW\Data\Interface\AddOns\Blizzard_SharedXML\UI.xsd">
 	<Script file="Blizzard_RaidUI.lua"/>
 	<Button name="RaidClassButtonTemplate" hidden="true" virtual="true">
 		<Size x="18" y="18"/>
@@ -28,7 +28,7 @@
 						<Anchor point="BOTTOMRIGHT" relativeTo="$parentIconTexture" x="2" y="0"/>
 					</Anchors>
 				</FontString>
-			</Layer>		
+			</Layer>
 		</Layers>
 		<Scripts>
 			<OnLoad>
@@ -146,30 +146,16 @@
 					</OnEnter>
 				</Scripts>
 			</Button>
-			<Button name="$parentLoot" inherits="RaidRoleIconTemplate">
-				<Size x="11" y="11"/>
-				<Anchors>
-					<Anchor point="LEFT" relativeTo="$parentRole" relativePoint="RIGHT" x="0" y="0"/>
-				</Anchors>
-				<Scripts>
-					<OnEnter>
-						-- Sets the Master Looter Tooltip
-						if ( self:GetParent().loot ) then
-							GameTooltip:SetOwner(self, "ANCHOR_LEFT");
-							GameTooltip:SetText(MASTER_LOOTER, nil, nil, nil, nil, true);
-						else
-							GameTooltip:Hide();
-						end	
-					</OnEnter>
-				</Scripts>
-			</Button>
 			<Frame name="$parentReadyCheck" inherits="ReadyCheckStatusTemplate" hidden="true">
+				<KeyValues>
+					<KeyValue key="useRaidIcons" value="true" type="boolean"/>
+				</KeyValues>
 				<Size x="11" y="11"/>
 				<Anchors>
 					<Anchor point="LEFT" relativeTo="$parentRank" relativePoint="RIGHT"  x="0" y="0"/>
 				</Anchors>
 				<Scripts>
-					<OnLoad>	
+					<OnLoad>
 						RaiseFrameLevelByTwo(self);
 					</OnLoad>
 				</Scripts>
@@ -182,9 +168,9 @@
 			</OnLoad>
 			<OnClick>
 				if ( button == "RightButton" ) then
-					RaidGroupButton_ShowMenu(self);
+					RaidGroupButton_OpenMenu(self);
 				else
-					SecureUnitButton_OnClick(self, button);
+					SecureUnitButton_OnClick(self, button, down);
 				end
 			</OnClick>
 			<OnDragStart>
@@ -306,7 +292,7 @@
 						<Anchor point="BOTTOMRIGHT" x="1" y="-1"/>
 					</Anchors>
 					<TexCoords left="0.296875" right="0.5703125" top="0" bottom="0.515625"/>
-				</Texture>	
+				</Texture>
 			</Layer>
 		</Layers>
 		<Scripts>
@@ -457,12 +443,12 @@
 					</OnValueChanged>
 					<OnMouseUp>
 						TargetUnit(self:GetParent().unit.."target");
-					</OnMouseUp> 
+					</OnMouseUp>
 				</Scripts>
 				<BarTexture file="Interface\TargetingFrame\UI-StatusBar"/>
 				<BarColor r="1.0" g="0" b="0"/>
 			</StatusBar>
-			<Frame name="$parentTargetTargetFrame" hidden="true">
+			<Frame name="$parentTargetTargetFrame" hidden="true" inherits="TooltipBackdropTemplate">
 				<Size x="90" y="32"/>
 				<Anchors>
 					<Anchor point="LEFT" relativePoint="RIGHT" x="6" y="-15"/>
@@ -477,27 +463,17 @@
 						</Texture>
 					</Layer>
 				</Layers>
-				<Backdrop bgFile="Interface\Tooltips\UI-Tooltip-Background" edgeFile="Interface\Tooltips\UI-Tooltip-Border" tile="true">
-					<EdgeSize>
-						<AbsValue val="16"/>
-					</EdgeSize>
-					<TileSize>
-						<AbsValue val="16"/>
-					</TileSize>
-					<BackgroundInsets>
-						<AbsInset left="5" right="5" top="5" bottom="5"/>
-					</BackgroundInsets>
-				</Backdrop>
+				<KeyValues>
+					<KeyValue key="backdropBorderColor" value="GRAY_FONT_COLOR" type="global"/>
+				</KeyValues>
 				<Scripts>
-					<OnLoad>
+					<OnLoad inherit="prepend">
 						self:SetFrameLevel(self:GetFrameLevel()-1);
-						self:SetBackdropBorderColor(0.5, 0.5, 0.5);
-						self:SetBackdropColor(TOOLTIP_DEFAULT_BACKGROUND_COLOR.r, TOOLTIP_DEFAULT_BACKGROUND_COLOR.g, TOOLTIP_DEFAULT_BACKGROUND_COLOR.b);
 						self:SetAlpha(0.7);
 					</OnLoad>
 					<OnMouseUp>
 						TargetUnit(self:GetParent().unit.."targettarget");
-					</OnMouseUp> 
+					</OnMouseUp>
 				</Scripts>
 			</Frame>
 			<StatusBar name="$parentTargetTarget" drawLayer="ARTWORK" inherits="TextStatusBar" enableMouse="false" hidden="true">
@@ -540,7 +516,7 @@
 						<Scripts>
 							<OnMouseUp>
 								TargetUnit(self:GetParent():GetParent().unit.."targettarget");
-							</OnMouseUp> 
+							</OnMouseUp>
 						</Scripts>
 					</Frame>
 				</Frames>
@@ -550,7 +526,7 @@
 					</OnValueChanged>
 					<OnMouseUp>
 						TargetUnit(self:GetParent().unit.."targettarget");
-					</OnMouseUp> 
+					</OnMouseUp>
 				</Scripts>
 				<BarTexture file="Interface\TargetingFrame\UI-StatusBar"/>
 			</StatusBar>
@@ -567,18 +543,10 @@
 					</OnLeave>
 				</Scripts>
 			</Button>
-			<Button name="$parentSpeaker" inherits="VoiceChatSpeakerTemplate" hidden="true">
-				<Size x="16" y="16"/>
-				<Anchors>
-					<Anchor point="TOPRIGHT" relativePoint="TOPLEFT" x="-5" y="6"/>
-				</Anchors>
-				<Scripts>
-					<OnUpdate>
-						VoiceChat_OnUpdate(self, elapsed);
-					</OnUpdate>
-				</Scripts>
-			</Button>
 			<Frame name="$parentReadyCheck" inherits="ReadyCheckStatusTemplate" hidden="true">
+				<KeyValues>
+					<KeyValue key="useRaidIcons" value="true" type="boolean"/>
+				</KeyValues>
 				<Size x="18" y="18"/>
 				<Anchors>
 					<Anchor point="LEFT" relativePoint="RIGHT" x="8" y="0"/>
@@ -641,35 +609,10 @@
 			</Layer>
 		</Layers>
 		<Frames>
-			<Frame name="$parentDropDown" inherits="UIDropDownMenuTemplate" id="1" hidden="true">
-				<Anchors>
-					<Anchor point="TOP" x="0" y="0"/>
-				</Anchors>
-				<Scripts>
-					<OnLoad>
-						RaidPulloutDropDown_OnLoad(self);
-					</OnLoad>
-				</Scripts>
-			</Frame>
-			<Frame name="$parentMenuBackdrop" setAllPoints="true">
-				<Backdrop bgFile="Interface\Tooltips\UI-Tooltip-Background" edgeFile="Interface\Tooltips\UI-Tooltip-Border" tile="true">
-					<EdgeSize>
-						<AbsValue val="16"/>
-					</EdgeSize>
-					<TileSize>
-						<AbsValue val="16"/>
-					</TileSize>
-					<BackgroundInsets>
-						<AbsInset left="5" right="5" top="5" bottom="5"/>
-					</BackgroundInsets>
-				</Backdrop>
-				<Scripts>
-					<OnLoad>
-						self:SetBackdropBorderColor(0.5, 0.5, 0.5);
-						self:SetBackdropColor(TOOLTIP_DEFAULT_BACKGROUND_COLOR.r, TOOLTIP_DEFAULT_BACKGROUND_COLOR.g, TOOLTIP_DEFAULT_BACKGROUND_COLOR.b);
-						self:SetAlpha(0.7);
-					</OnLoad>
-				</Scripts>
+			<Frame name="$parentMenuBackdrop" setAllPoints="true" inherits="TooltipBackdropTemplate" alpha="0.7">
+				<KeyValues>
+					<KeyValue key="backdropBorderColor" value="GRAY_FONT_COLOR" type="global"/>
+				</KeyValues>
 			</Frame>
 		</Frames>
 		<HitRectInsets>
@@ -698,25 +641,25 @@
 			<OnDragStop>
 				RaidPulloutStopMoving(self);
 			</OnDragStop>
-			<OnClick>
-				if (button == "RightButton") then
-					ToggleDropDownMenu(1, nil, _G[self:GetName().."DropDown"]);
-				end
-			</OnClick>
 			<OnMouseUp>
 				self:StopMovingOrSizing();
 				self:SetFrameStrata("BACKGROUND");
-			</OnMouseUp> 
+			</OnMouseUp>
 		</Scripts>
 	</Button>
-	<Button name="RaidClassButton15"  parent="RaidFrame" inherits="RaidClassButtonTemplate" id="14">
+	<Button name="RaidClassButton16"  parent="RaidFrame" inherits="RaidClassButtonTemplate" id="16">
 		<Anchors>
 			<Anchor point="BOTTOMLEFT" relativeTo="RaidFrame" relativePoint="BOTTOMRIGHT" x="0" y="16"/>
 		</Anchors>
 	</Button>
+	<Button name="RaidClassButton15"  parent="RaidFrame" inherits="RaidClassButtonTemplate" id="15">
+		<Anchors>
+			<Anchor point="BOTTOM" relativeTo="RaidClassButton16" relativePoint="TOP" x="0" y="12"/>
+		</Anchors>
+	</Button>
 	<Button name="RaidClassButton14"  parent="RaidFrame" inherits="RaidClassButtonTemplate" id="14">
 		<Anchors>
-			<Anchor point="BOTTOMLEFT" relativeTo="RaidFrame" relativePoint="BOTTOMRIGHT" x="-2" y="16"/>
+			<Anchor point="BOTTOM" relativeTo="RaidClassButton15" relativePoint="TOP" x="0" y="12"/>
 		</Anchors>
 	</Button>
 	<Button name="RaidClassButton13"  parent="RaidFrame" inherits="RaidClassButtonTemplate" id="13">
@@ -786,42 +729,42 @@
 	</Button>
 	<Frame name="RaidGroup1" inherits="RaidGroupTemplate" id="1">
 		<Anchors>
-			<Anchor point="TOPLEFT" x="3" y="-58"/>
+			<Anchor point="TOPRIGHT" relativePoint="TOP" x="-8" y="-58"/>
 		</Anchors>
 	</Frame>
 	<Frame name="RaidGroup2" inherits="RaidGroupTemplate" id="2">
 		<Anchors>
-			<Anchor point="LEFT" relativeTo="RaidGroup1" relativePoint="RIGHT" x="3" y="0"/>
+			<Anchor point="TOPLEFT" relativePoint="TOP" x="8" y="-58"/>
 		</Anchors>
 	</Frame>
 	<Frame name="RaidGroup3" inherits="RaidGroupTemplate" id="3">
 		<Anchors>
-			<Anchor point="TOP" relativeTo="RaidGroup1" relativePoint="BOTTOM" x="0" y="-14"/>
+			<Anchor point="TOP" relativeTo="RaidGroup1" relativePoint="BOTTOM" y="-14"/>
 		</Anchors>
 	</Frame>
 	<Frame name="RaidGroup4" inherits="RaidGroupTemplate" id="4">
 		<Anchors>
-			<Anchor point="LEFT" relativeTo="RaidGroup3" relativePoint="RIGHT" x="3" y="0"/>
+			<Anchor point="TOP" relativeTo="RaidGroup2" relativePoint="BOTTOM" y="-14"/>
 		</Anchors>
 	</Frame>
 	<Frame name="RaidGroup5" inherits="RaidGroupTemplate" id="5">
 		<Anchors>
-			<Anchor point="TOP" relativeTo="RaidGroup3" relativePoint="BOTTOM" x="0" y="-14"/>
+			<Anchor point="TOP" relativeTo="RaidGroup3" relativePoint="BOTTOM" y="-14"/>
 		</Anchors>
 	</Frame>
 	<Frame name="RaidGroup6" inherits="RaidGroupTemplate" id="6">
 		<Anchors>
-			<Anchor point="LEFT" relativeTo="RaidGroup5" relativePoint="RIGHT" x="3" y="0"/>
+			<Anchor point="TOP" relativeTo="RaidGroup4" relativePoint="BOTTOM" y="-14"/>
 		</Anchors>
 	</Frame>
 	<Frame name="RaidGroup7" inherits="RaidGroupTemplate" id="7">
 		<Anchors>
-			<Anchor point="TOP" relativeTo="RaidGroup5" relativePoint="BOTTOM" x="0" y="-14"/>
+			<Anchor point="TOP" relativeTo="RaidGroup5" relativePoint="BOTTOM" y="-14"/>
 		</Anchors>
 	</Frame>
 	<Frame name="RaidGroup8" inherits="RaidGroupTemplate" id="8">
 		<Anchors>
-			<Anchor point="LEFT" relativeTo="RaidGroup7" relativePoint="RIGHT" x="3" y="0"/>
+			<Anchor point="TOP" relativeTo="RaidGroup6" relativePoint="BOTTOM" y="-14"/>
 		</Anchors>
 	</Frame>
 	<Button name="RaidGroupButton1" inherits="RaidGroupButtonTemplate" id="1"/>

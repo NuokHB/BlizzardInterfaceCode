@@ -1,12 +1,16 @@
 UIPanelWindows["ObliterumForgeFrame"] = {area = "left", pushable = 3, showFailedFunc = C_TradeSkillUI.CloseObliterumForge, };
 
+local OBLITERUM_UI_UNIT_EVENTS = {
+	"UNIT_SPELLCAST_START", 
+	"UNIT_SPELLCAST_INTERRUPTED",
+	"UNIT_SPELLCAST_STOP",
+};
+
 ObliterumForgeMixin = {};
 
 function ObliterumForgeMixin:OnLoad()
-	SetPortraitToTexture(self.portrait, "Interface\\Icons\\INV_Obliterum_Ash");
-	self.TitleText:SetText(OBLITERUM_FORGE_TITLE);
-	
-	self:RegisterEvent("OBLITERUM_FORGE_CLOSE");
+	self:SetPortraitToAsset("Interface\\Icons\\INV_Obliterum_Ash");
+	self:SetTitle(OBLITERUM_FORGE_TITLE);
 	self:RegisterEvent("OBLITERUM_FORGE_PENDING_ITEM_CHANGED");
 end
 
@@ -14,7 +18,7 @@ function ObliterumForgeMixin:OnEvent(event, ...)
 	if event == "OBLITERUM_FORGE_PENDING_ITEM_CHANGED" then
 		self:UpdateObliterateButtonState();
 	elseif event == "UNIT_SPELLCAST_START" then
-		local unitTag, spellName, rank, lineID, spellID = ...;
+		local unitTag, lineID, spellID = ...;
 		if spellID == C_TradeSkillUI.GetObliterateSpellID() then
 			self.obliterateCastLineID = lineID;
 		end
@@ -24,29 +28,22 @@ function ObliterumForgeMixin:OnEvent(event, ...)
 			self.obliterateCastLineID = nil;
 		end
 	elseif event == "UNIT_SPELLCAST_STOP" then
-		local unitTag, spellName, rank, lineID, spellID = ...;
+		local unitTag, lineID, spellID = ...;
 		if self.obliterateCastLineID and self.obliterateCastLineID == lineID then
 			C_TradeSkillUI.ClearPendingObliterateItem();
 		end
-	elseif event == "OBLITERUM_FORGE_CLOSE" then
-		HideUIPanel(self);
 	end
 end
 
 function ObliterumForgeMixin:OnShow()
 	self:UpdateObliterateButtonState();
-
-	self:RegisterUnitEvent("UNIT_SPELLCAST_START", "player");
-	self:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTED", "player");
-	self:RegisterUnitEvent("UNIT_SPELLCAST_STOP", "player");
+	FrameUtil.RegisterFrameForUnitEvents(self, OBLITERUM_UI_UNIT_EVENTS, "player")
 end
 
 function ObliterumForgeMixin:OnHide()
 	C_TradeSkillUI.CloseObliterumForge();
 
-	self:UnregisterEvent("UNIT_SPELLCAST_START");
-	self:UnregisterEvent("UNIT_SPELLCAST_INTERRUPTED");
-	self:UnregisterEvent("UNIT_SPELLCAST_STOP");
+	FrameUtil.UnregisterFrameForEvents(self, OBLITERUM_UI_UNIT_EVENTS);
 
 	self.obliterateCastLineID = nil;
 end
@@ -56,7 +53,7 @@ function ObliterumForgeMixin:ObliterateItem()
 end
 
 function ObliterumForgeMixin:UpdateObliterateButtonState()
-	self.ObliterateButton:SetEnabled(C_TradeSkillUI.GetPendingObliterateItemID() ~= nil); 
+	self.ObliterateButton:SetEnabled(C_TradeSkillUI.GetPendingObliterateItemID() ~= nil);
 end
 
 ObliterumForgeItemSlotMixin = {};
@@ -83,9 +80,9 @@ end
 
 function ObliterumForgeItemSlotMixin:RefreshIcon()
 	local itemLink = C_TradeSkillUI.GetPendingObliterateItemLink();
-	local itemName, itemHyperLink, itemRarity, itemTexture;
+	local itemName, itemHyperLink, itemRarity, itemTexture, _;
 	if itemLink then
-		itemName, itemHyperLink, itemRarity, _, _, _, _, _, _, itemTexture = GetItemInfo(itemLink);
+		itemName, itemHyperLink, itemRarity, _, _, _, _, _, _, itemTexture = C_Item.GetItemInfo(itemLink);
 	else
 		self:RegisterEvent("GET_ITEM_INFO_RECEIVED");
 	end
